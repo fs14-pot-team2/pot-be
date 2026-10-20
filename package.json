@@ -22,26 +22,26 @@
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
-    "express": "^5.1.0",
+    "@prisma/client": "7.10.1",
     "dotenv": "^17.2.0",
-    "@prisma/client": "7.10.1"
+    "express": "^5.1.0"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.3",
-    "@commitlint/config-conventional": "^20.5.3",
-    "@eslint/js": "^9.39.0",
-    "eslint": "^9.39.0",
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
+    "@eslint/js": "10.0.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.5.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.6",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.72.0",
-    "@types/node": "^24.0.0",
-    "@types/express": "^5.0.0",
+    "prisma": "7.10.1",
     "tsx": "^4.20.0",
-    "prisma": "7.10.1"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx}": [
