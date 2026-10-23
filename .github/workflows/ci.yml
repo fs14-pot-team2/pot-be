@@ -59,6 +59,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: 배포 파일 빌드
+        run: |
+          npm ci
+          npm prune --omit=dev --ignore-scripts
+          test -f dist/server.js
+          zip -qr deploy.zip package.json package-lock.json dist node_modules .ebextensions
+
       - name: AWS 권한 연결
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -72,4 +84,5 @@ jobs:
           application-name: pot-be
           environment-name: pot-be-env
           version-label: ${{ github.sha }}
+          deployment-package-path: deploy.zip
           use-existing-application-version-if-available: true
