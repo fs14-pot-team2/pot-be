@@ -6,3 +6,228 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum ServiceType {
+  SHORT_CARE
+  REGULAR_CARE
+}
+
+enum Region {
+  SEOUL
+  GYEONGGI
+  INCHEON
+  GANGWON
+  CHUNGBUK
+  CHUNGNAM
+  SEJONG
+  DAEJEON
+  JEONBUK
+  JEONNAM
+  GWANGJU
+  GYEONGBUK
+  GYEONGNAM
+  DAEGU
+  ULSAN
+  BUSAN
+  JEJU
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum UserRole {
+  OWNER
+  SITTER
+}
+
+enum CareRequestStatus {
+  OPEN
+  MATCHED
+  CANCELED
+  EXPIRED
+}
+
+enum QuoteType {
+  GENERAL
+  DESIGNATED
+}
+
+model User {
+  id                  BigInt              @id @default(autoincrement())
+  nickname            String
+  email               String
+  passwordHash        String
+  role                UserRole
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  ownerProfile        OwnerProfile?
+  sitterProfile       SitterProfile?
+  careRequests        CareRequest[]
+  designatedRequests  DesignatedRequest[]
+  ignoredRequests     IgnoredRequest[]
+  quotes              Quote[]
+  ownerConversations  Conversation[]      @relation("OwnerConversations")
+  sitterConversations Conversation[]      @relation("SitterConversations")
+  messages            Message[]
+  writtenReviews      Review[]            @relation("OwnerReviews")
+  receivedReviews     Review[]            @relation("SitterReviews")
+
+  @@unique([nickname, role])
+  @@unique([email, role])
+}
+
+model OwnerProfile {
+  id                    BigInt        @id @default(autoincrement())
+  userId                BigInt        @unique
+  user                  User          @relation(fields: [userId], references: [id])
+  profileImageUrl       String?
+  preferredServiceTypes ServiceType[]
+  livingRegion          Region?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model SitterService {
+  id              BigInt        @id @default(autoincrement())
+  sitterProfileId BigInt
+  sitterProfile   SitterProfile @relation(fields: [sitterProfileId], references: [id])
+  serviceType     ServiceType
+
+  @@unique([sitterProfileId, serviceType])
+}
+
+model SitterProfile {
+  id                   BigInt                @id @default(autoincrement())
+  userId               BigInt                @unique
+  user                 User                  @relation(fields: [userId], references: [id])
+  profileImageUrl      String?
+  description          String?
+  gender               Gender
+  shortIntroduction    String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  sitterServices       SitterService[]
+  sitterServiceRegions SitterServiceRegion[]
+}
+
+model SitterServiceRegion {
+  id              BigInt        @id @default(autoincrement())
+  sitterProfileId BigInt
+  sitterProfile   SitterProfile @relation(fields: [sitterProfileId], references: [id])
+  region          Region
+
+  @@unique([sitterProfileId, region])
+}
+
+model CareRequest {
+  id                 BigInt              @id @default(autoincrement())
+  owner              User                @relation(fields: [ownerId], references: [id])
+  ownerId            BigInt
+  serviceType        ServiceType
+  startDate          DateTime            @db.Date
+  endDate            DateTime            @db.Date
+  zonecode           String
+  address            String
+  detailAddress      String?
+  sido               String
+  sigungu            String
+  bname              String?
+  region             Region
+  status             CareRequestStatus
+  confirmedQuoteId   BigInt?             @unique
+  confirmedQuote     Quote?              @relation("ConfirmedQuote", fields: [confirmedQuoteId], references: [id])
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  canceledAt         DateTime?
+  designatedRequests DesignatedRequest[]
+  ignoredRequests    IgnoredRequest[]
+  quotes             Quote[]             @relation("CareRequestQuotes")
+  review             Review?
+}
+
+model DesignatedRequest {
+  id              BigInt           @id @default(autoincrement())
+  careRequestId   BigInt
+  careRequest     CareRequest      @relation(fields: [careRequestId], references: [id])
+  sitterId        BigInt
+  sitter          User             @relation(fields: [sitterId], references: [id])
+  createdAt       DateTime         @default(now())
+  rejectedRequest RejectedRequest?
+
+  @@unique([careRequestId, sitterId])
+}
+
+model RejectedRequest {
+  id                  BigInt            @id @default(autoincrement())
+  designatedRequestId BigInt            @unique
+  designatedRequest   DesignatedRequest @relation(fields: [designatedRequestId], references: [id])
+  reason              String
+  createdAt           DateTime          @default(now())
+}
+
+model IgnoredRequest {
+  id            BigInt      @id @default(autoincrement())
+  careRequestId BigInt
+  careRequest   CareRequest @relation(fields: [careRequestId], references: [id])
+  sitterId      BigInt
+  sitter        User        @relation(fields: [sitterId], references: [id])
+  createdAt     DateTime    @default(now())
+
+  @@unique([careRequestId, sitterId])
+}
+
+model Quote {
+  id                 BigInt       @id @default(autoincrement())
+  careRequestId      BigInt
+  careRequest        CareRequest  @relation("CareRequestQuotes", fields: [careRequestId], references: [id])
+  sitterId           BigInt
+  sitter             User         @relation(fields: [sitterId], references: [id])
+  confirmedInRequest CareRequest? @relation("ConfirmedQuote")
+  type               QuoteType
+  price              Int
+  comment            String
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@unique([careRequestId, sitterId])
+}
+
+model Conversation {
+  id            BigInt    @id @default(autoincrement())
+  ownerId       BigInt
+  owner         User      @relation("OwnerConversations", fields: [ownerId], references: [id])
+  sitterId      BigInt
+  sitter        User      @relation("SitterConversations", fields: [sitterId], references: [id])
+  lastMessageAt DateTime
+  createdAt     DateTime  @default(now())
+  messages      Message[]
+
+  @@unique([ownerId, sitterId])
+}
+
+model Message {
+  id             BigInt       @id @default(autoincrement())
+  conversationId BigInt
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       BigInt
+  sender         User         @relation(fields: [senderId], references: [id])
+  content        String
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+}
+
+model Review {
+  id            BigInt      @id @default(autoincrement())
+  careRequestId BigInt      @unique
+  careRequest   CareRequest @relation(fields: [careRequestId], references: [id])
+  ownerId       BigInt
+  owner         User        @relation("OwnerReviews", fields: [ownerId], references: [id])
+  sitterId      BigInt
+  sitter        User        @relation("SitterReviews", fields: [sitterId], references: [id])
+  rating        Int
+  content       String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
