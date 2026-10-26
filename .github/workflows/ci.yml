@@ -68,7 +68,7 @@ jobs:
         run: |
           npm ci
           npm prune --omit=dev --ignore-scripts
-          test -f dist/server.js
+          test -f dist/index.js
           zip -qr deploy.zip package.json package-lock.json dist node_modules .ebextensions
 
       - name: AWS 권한 연결
