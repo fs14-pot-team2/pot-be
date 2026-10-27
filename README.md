@@ -32,6 +32,8 @@ npm run dev
 
 <http://localhost:4000/health>에서 `{"status":"ok"}` 응답을 확인할 수 있습니다. 현재 `/health`는 DB에 접속하지 않으므로 PostgreSQL을 켜지 않아도 실행됩니다.
 
+브라우저에서 API를 호출할 프론트 주소는 `CORS_ORIGINS`에 쉼표로 구분해 지정합니다. 주소는 `https://`를 포함한 정확한 출처여야 하며 끝에 `/`를 붙이지 않습니다. 로컬 `.env.example`에는 `http://localhost:3000`이 들어 있습니다. 빈스톡 환경 속성에는 실제 Vercel Production 주소와 테스트에 사용할 Preview 주소를 입력하세요. Preview 배포 주소가 바뀌면 이 값도 갱신해야 합니다. `CORS_ORIGINS`가 없으면 브라우저 출처를 허용하지 않습니다. 쿠키를 포함한 요청을 위해 허용된 출처에는 자격 증명 전송을 허용합니다.
+
 DB를 사용하는 기능을 개발할 때는 Docker를 설치하고 로컬 PostgreSQL 컨테이너를 실행하세요.
 
 ```bash
