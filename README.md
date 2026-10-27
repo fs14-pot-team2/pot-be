@@ -9,6 +9,16 @@ POT (Plant On Trust)은 식물 돌봄이 필요한 팟오너와 방문 돌봄을
 - ESLint, Prettier, Husky, GitHub Actions
 - 배포: AWS Elastic Beanstalk (`main` push 시 배포 작업 실행)
 
+## HTTPS 배포 준비
+
+단일 인스턴스 Elastic Beanstalk의 nginx가 `pot-api.duckdns.org`에서 HTTPS를 처리합니다. 배포 설정은 인스턴스의 공인 IP를 DuckDNS에 등록하고, Let's Encrypt 인증서를 발급한 뒤 443 포트를 엽니다. 인증서와 DuckDNS 주소는 하루 두 번 확인·갱신합니다.
+
+1. [DuckDNS](https://www.duckdns.org/)에 로그인해 `pot-api` 도메인을 등록합니다. 이미 사용 중인 이름이면 이 저장소의 HTTPS 설정에 있는 도메인도 함께 바꿔야 합니다.
+2. Elastic Beanstalk 환경 속성에 `DUCKDNS_TOKEN`(DuckDNS 계정의 토큰)과 `ACME_EMAIL`(인증서 만료 알림을 받을 이메일)을 추가합니다. 토큰은 Git, PR, 채팅에 적지 않습니다.
+3. HTTPS 설정이 `main`에 반영되면 배포가 인증서를 발급하고 nginx를 시작합니다. 배포 완료 후 `https://pot-api.duckdns.org/health`에서 `{"status":"ok"}`를 확인합니다.
+
+도메인을 등록하고 두 환경 속성을 입력하기 전에는 이 변경을 `main`에 배포하지 마세요. 인증서 발급이 실패하면 배포가 중단됩니다. Elastic Beanstalk 기존 주소의 HTTP `/health`는 상태 확인용으로 유지됩니다. 인스턴스가 바뀌어 공인 IP가 달라져도 배포 또는 정기 갱신 시 DuckDNS 주소를 다시 맞춥니다.
+
 ## 시작하기
 
 Node.js **24.16.0**, npm **11.x**를 사용합니다. 저장소 루트에서 실행하세요.
