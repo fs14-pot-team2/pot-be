@@ -21,6 +21,12 @@ BE: http://localhost:4000/health
 
 도메인을 등록하고 두 환경 속성을 입력하기 전에는 이 변경을 `main`에 배포하지 마세요. 인증서 발급이 실패하면 배포가 중단됩니다. Elastic Beanstalk 기존 주소의 HTTP `/health`는 상태 확인용으로 유지됩니다. 인스턴스가 바뀌어 공인 IP가 달라져도 배포 또는 정기 갱신 시 DuckDNS 주소를 다시 맞춥니다.
 
+## CORS 설정
+
+브라우저에서 API를 호출할 프론트 주소는 Elastic Beanstalk 환경 속성 `CORS_ORIGINS`에 쉼표로 구분해 지정합니다. `https://`를 포함한 정확한 출처를 입력하고 끝에 `/`를 붙이지 않습니다. Vercel Production 주소와 테스트에 사용할 Preview 주소를 함께 등록할 수 있으며, Preview 배포 주소가 바뀌면 값을 갱신해야 합니다. 쿠키를 포함한 요청을 위해 허용된 출처에 자격 증명 전송을 허용합니다. `CORS_ORIGINS`가 없으면 브라우저 출처를 허용하지 않습니다.
+
+로컬 개발 시 `.env.example`의 `http://localhost:3000`을 참고하세요.
+
 ## 코드 규칙
 
 - 들여쓰기 2칸, 큰따옴표, 세미콜론을 사용합니다.
