@@ -69,7 +69,7 @@ jobs:
           npm ci
           npm prune --omit=dev --ignore-scripts
           test -f dist/index.js
-          zip -qr deploy.zip package.json package-lock.json dist node_modules .ebextensions
+          zip -qr deploy.zip package.json package-lock.json dist node_modules .ebextensions .platform
 
       - name: AWS 권한 연결
         uses: aws-actions/configure-aws-credentials@v4
