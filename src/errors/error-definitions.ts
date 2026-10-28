@@ -77,14 +77,16 @@ export const ERROR_DEFINITIONS = {
     message: "이메일 또는 비밀번호가 올바르지 않습니다.",
     statusCode: 401,
   },
+  // 개인정보 및 프로필 수정 페이지 진입시
   PASSWORD_MISMATCH: {
     code: "PASSWORD_MISMATCH",
-    message: "비밀번호가 일치하지 않습니다. (개인정보 및 프로필 수정 페이지 진입시)",
+    message: "비밀번호가 일치하지 않습니다.",
     statusCode: 401,
   },
+  // 토큰 만료
   REFRESH_TOKEN_INVALID: {
     code: "REFRESH_TOKEN_INVALID",
-    message: "유효하지 않은 리프레시 토큰입니다. (만료)",
+    message: "유효하지 않은 리프레시 토큰입니다.",
     statusCode: 401,
   },
 
@@ -156,9 +158,10 @@ export const ERROR_DEFINITIONS = {
     message: "팟트너를 찾을 수 없습니다.",
     statusCode: 404,
   },
+  // 팟트너가 팟트너를 조회할 수 없음
   SITTER_PROFILE_ACCESS_FORBIDDEN: {
     code: "SITTER_PROFILE_ACCESS_FORBIDDEN",
-    message: "해당 팟트너 정보를 조회할 권한이 없습니다. (팟트너가 팟트너를 조회)",
+    message: "해당 팟트너 정보를 조회할 권한이 없습니다.",
     statusCode: 403,
   },
 
