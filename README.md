@@ -38,7 +38,13 @@ DB를 사용하는 기능을 개발할 때는 Docker를 설치하고 로컬 Post
 docker compose up -d
 ```
 
-`compose.yml`은 개발용 `pot` 데이터베이스를 로컬 컴퓨터의 5432 포트에 만듭니다. `.env.example`의 `DATABASE_URL`은 이 컨테이너에 맞춘 예시입니다. 다른 DB를 사용한다면 각자 `.env`의 접속 정보를 바꾸세요. `.env`와 실제 비밀번호는 Git에 올리지 않습니다.
+`compose.yml`은 개발용 `pot` 데이터베이스를 로컬 컴퓨터의 `127.0.0.1:5432`에 연결하며, 다른 컴퓨터에서 직접 접속할 수 없도록 제한합니다.
+
+DB를 처음 실행하기 전에 `.env.example`을 복사한 `.env` 파일에서 `POSTGRES_PASSWORD`에 개인 DB 비밀번호를 설정하고, `DATABASE_URL`에도 동일한 비밀번호를 입력해야 합니다. `localhost`는 본인 컴퓨터를 의미하므로 변경할 필요가 없습니다.
+
+이미 PostgreSQL을 사용 중인 경우, `.env` 또는 `compose.yml`만 변경해도 기존 DB 계정의 비밀번호는 자동으로 변경되지 않습니다. 기존 데이터를 보존하면서 실제 PostgreSQL 계정의 비밀번호도 별도로 변경해야 합니다.
+
+`.env`와 실제 비밀번호는 Git에 올리지 않습니다. 기존 Docker 볼륨을 삭제하면 저장된 DB 데이터가 사라질 수 있으므로 주의하세요.
 
 `develop`에는 Prisma 모델과 초기 마이그레이션 파일이 있습니다. `npm run prisma:validate`로 스키마를 검사하고 `npm run prisma:generate`로 클라이언트를 생성할 수 있습니다. 로컬 DB와 운영 RDS는 별개입니다. 운영 RDS 접속 확인만으로 마이그레이션 적용이 확인되는 것은 아닙니다. DB 접근 코드를 작성할 때는 Prisma 7의 PostgreSQL 드라이버 어댑터와 마이그레이션 적용 절차를 팀에서 확인하세요.
 
