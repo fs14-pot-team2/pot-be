@@ -58,7 +58,19 @@ const SIDO_TO_REGION = new Map<string, Region>([
   ["제주특별자치도", Region.JEJU],
 ]);
 
-export function toRegion(sido: string): Region {
+/**
+ * 시도명을 Prisma Region enum으로 변환
+ *
+ * - 카카오 주소 API의 sido 등 지역명 문자열을 변환할 때 사용
+ * - 문자열이 아니거나 매핑되지 않는 지역명은 INVALID_REGION
+ * - 호출부에서는 API별 필수 입력 여부 등 요청값 검증을 별도로 수행
+ * - 이미 Region enum인 값은 별도 변환 없이 사용
+ */
+export function toRegion(sido: unknown): Region {
+  if (typeof sido !== "string") {
+    throw new AppError("INVALID_REGION");
+  }
+
   const region = SIDO_TO_REGION.get(sido.trim());
 
   if (region === undefined) {

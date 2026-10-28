@@ -52,6 +52,12 @@ describe("toRegion", () => {
     assert.deepEqual([...mappedRegions].sort(), Object.values(Region).sort());
   });
 
+  it("문자열이 아닌 입력값은 INVALID_REGION으로 거부한다", () => {
+    for (const sido of [undefined, null, 123, true, [], {}]) {
+      assertInvalidRegion(sido);
+    }
+  });
+
   it("입력값의 앞뒤 공백을 제거한다", () => {
     assert.equal(toRegion(" 서울특별시 "), Region.SEOUL);
     assert.equal(toRegion("\t경기도\n"), Region.GYEONGGI);
@@ -69,7 +75,7 @@ describe("toRegion", () => {
     }
   });
 
-  function assertInvalidRegion(sido: string) {
+  function assertInvalidRegion(sido: unknown) {
     assert.throws(
       () => toRegion(sido),
       (error: unknown) =>
