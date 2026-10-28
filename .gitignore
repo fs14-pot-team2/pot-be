@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 
 # Prisma generated client
 src/generated/prisma/
+
+# macOS
+.DS_Store
