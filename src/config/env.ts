@@ -17,4 +17,7 @@ export const env = {
   get databaseUrl(): string {
     return requireEnv("DATABASE_URL");
   },
+  get jwtAccessSecret(): string {
+    return requireEnv("JWT_ACCESS_SECRET");
+  },
 };
