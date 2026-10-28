@@ -13,18 +13,18 @@ POT(Plant On Trust) 백엔드의 로컬 개발 및 시연을 위한 더미 데�
 
 저장소 루트(`pot-be`)에서 실행한다.
 
-**1. 라이브러리 설치**
-
-```bash
-npm ci
-```
-
-**2. 환경 변수 준비**
-
-`.env` 파일이 없다면 `.env.example`을 복사한 후 로컬 DB 접속 정보를 확인한다.
+**1. 환경 변수 준비**
 
 ```bash
 cp .env.example .env
+```
+
+`.env`에서 개인 `POSTGRES_PASSWORD`를 설정하고 `DATABASE_URL`에도 같은 비밀번호를 입력한다.
+
+**2. 라이브러리 설치**
+
+```bash
+npm ci
 ```
 
 **3. PostgreSQL 실행**
