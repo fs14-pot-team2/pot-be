@@ -23,8 +23,8 @@ Node.js **24.16.0**, npm **11.x**를 사용합니다. 저장소 루트에서 실
 
 ```bash
 nvm use
-npm ci
 cp .env.example .env
+npm ci
 npm run dev
 ```
 
@@ -41,6 +41,8 @@ docker compose up -d
 `compose.yml`은 개발용 `pot` 데이터베이스를 로컬 컴퓨터의 `127.0.0.1:5432`에 연결하며, 다른 컴퓨터에서 직접 접속할 수 없도록 제한합니다.
 
 DB를 처음 실행하기 전에 `.env.example`을 복사한 `.env` 파일에서 `POSTGRES_PASSWORD`에 개인 DB 비밀번호를 설정하고, `DATABASE_URL`에도 동일한 비밀번호를 입력해야 합니다. `localhost`는 본인 컴퓨터를 의미하므로 변경할 필요가 없습니다.
+
+`npm ci`의 Prisma Client 생성과 빌드는 DB에 접속하지 않습니다. 실제 DB를 사용하는 기능, 마이그레이션, 시딩에는 올바른 `DATABASE_URL`이 필요합니다.
 
 이미 PostgreSQL을 사용 중인 경우, `.env` 또는 `compose.yml`만 변경해도 기존 DB 계정의 비밀번호는 자동으로 변경되지 않습니다. 기존 데이터를 보존하면서 실제 PostgreSQL 계정의 비밀번호도 별도로 변경해야 합니다.
 
