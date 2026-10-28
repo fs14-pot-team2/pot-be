@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_TELEMETRY_DISABLED: "1"
+      # 스키마 검사와 클라이언트 생성에만 사용하며 DB 연결은 하지 않습니다.
+      DATABASE_URL: postgresql://localhost:5432/pot?schema=public
     steps:
       - uses: actions/checkout@v4
         with:
