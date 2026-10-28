@@ -45,7 +45,7 @@ npm run prisma:generate
 **5. 더미 데이터 저장**
 
 ```bash
-npx tsx prisma/seed.ts
+npx prisma db seed
 ```
 
 **6. 데이터 확인**

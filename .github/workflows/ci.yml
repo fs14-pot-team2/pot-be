@@ -33,6 +33,7 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run prisma:validate
+      - run: npm run prisma:generate
       - run: npm run typecheck
       - run: npm run build
       - name: Validate PR commits and squash title
