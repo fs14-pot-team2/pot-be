@@ -20,4 +20,7 @@ export const env = {
   get jwtAccessSecret(): string {
     return requireEnv("JWT_ACCESS_SECRET");
   },
+  get jwtRefreshSecret(): string {
+    return requireEnv("JWT_REFRESH_SECRET");
+  },
 };
