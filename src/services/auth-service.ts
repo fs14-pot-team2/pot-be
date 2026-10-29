@@ -35,7 +35,13 @@ export async function signup(input: SignupInput) {
         role,
         ...(role === "OWNER" && { ownerProfile: { create: {} } }),
       },
-      select: { id: true, email: true, nickname: true, role: true },
+      select: {
+        id: true,
+        email: true,
+        nickname: true,
+        role: true,
+        createdAt: true,
+      },
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
