@@ -1,7 +1,6 @@
-import argon2 from "argon2";
-
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
+import { hashPassword } from "../utils/password.js";
 import type { SignupInput } from "../validators/auth-validator.js";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -24,7 +23,7 @@ export async function signup(input: SignupInput) {
 
   await assertNotTaken(email, nickname, role);
 
-  const passwordHash = await argon2.hash(password);
+  const passwordHash = await hashPassword(password);
 
   try {
     return await prisma.user.create({
