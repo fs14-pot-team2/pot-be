@@ -1,6 +1,7 @@
+import argon2 from "argon2";
+
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
-import { hashPassword } from "../utils/password.js";
 import type { SignupInput } from "../validators/auth-validator.js";
 
 export async function signup(input: SignupInput) {
@@ -13,10 +14,16 @@ export async function signup(input: SignupInput) {
   if (emailTaken) throw new AppError("EMAIL_ALREADY_EXISTS");
   if (nicknameTaken) throw new AppError("NICKNAME_ALREADY_EXISTS");
 
-  const passwordHash = await hashPassword(password);
+  const passwordHash = await argon2.hash(password);
 
   return prisma.user.create({
-    data: { email, passwordHash, nickname, role },
+    data: {
+      email,
+      passwordHash,
+      nickname,
+      role,
+      ...(role === "OWNER" && { ownerProfile: { create: {} } }),
+    },
     select: { id: true, email: true, nickname: true, role: true },
   });
 }
