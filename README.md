@@ -82,7 +82,8 @@ DB를 처음 실행하기 전에 `.env.example`을 복사한 `.env` 파일에서
 - 레이어드 아키텍처를 사용하고 도메인당 라우터 하나를 둡니다.
 - 파일명은 `kebab-case`, 변수·함수는 `camelCase`, 공통 상수는 `UPPER_SNAKE_CASE`를 사용합니다.
 - 들여쓰기 2칸, 큰따옴표, 세미콜론을 사용합니다.
-- 커밋과 PR 제목은 `feat/fix/refactor/chore/style: 한글 설명` 형식을 사용합니다.
+- 커밋과 PR 제목은 `feat/fix/refactor/chore/style/test: 한글 설명` 형식을 사용합니다.
+- 제품 코드 변경 없이 테스트 코드를 추가하거나 수정할 때는 `test` 타입을 사용합니다.
 
 ```bash
 npm run lint
