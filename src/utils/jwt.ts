@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 
 import { env } from "../config/env.js";
-import type { UserRole } from "../types/auth.js";
+import { isUserRole, type UserRole } from "../types/auth.js";
 
 const ACCESS_TOKEN_EXPIRES_IN = "30m";
 const REFRESH_TOKEN_EXPIRES_IN = "7d";
@@ -21,4 +21,24 @@ export function signRefreshToken(payload: TokenPayload) {
     algorithm: "HS256",
     expiresIn: REFRESH_TOKEN_EXPIRES_IN,
   });
+}
+
+export function verifyRefreshToken(token: string): TokenPayload | null {
+  try {
+    const decoded = jwt.verify(token, env.jwtRefreshSecret, {
+      algorithms: ["HS256"],
+    });
+    if (typeof decoded === "string") return null;
+
+    const { sub, role } = decoded;
+    if (typeof sub !== "string" || !/^\d+$/.test(sub) || !isUserRole(role)) {
+      return null;
+    }
+    return { sub, role };
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return null;
+    }
+    throw error;
+  }
 }

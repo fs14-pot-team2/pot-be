@@ -1,4 +1,5 @@
 import { env } from "./config/env.js";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import { careRequestRouter } from "./routes/care-request-routes.js";
@@ -11,6 +12,7 @@ app.disable("x-powered-by");
 app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
 app.use(express.json());
+app.use(cookieParser());
 app.get("/health", (_request, response) => {
   response.status(200).json({ status: "ok" });
 });
