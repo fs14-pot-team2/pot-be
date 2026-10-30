@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import AppError from "../errors/app-error.js";
 import {
   findCareRequestById,
@@ -109,11 +110,14 @@ export async function getActiveCareRequest(ownerId: bigint) {
   }
 }
 
+type TransactionRunner = <T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T>;
+
 // 팟오너의 돌봄 요청 수정
 export async function updateCareRequest(
   ownerId: bigint,
   careRequestId: bigint,
   careRequestData: UpdateCareRequestInput,
+  runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
   const initialRequest = await findCareRequestById(careRequestId);
 
@@ -126,7 +130,7 @@ export async function updateCareRequest(
   }
 
   try {
-    const updatedRequest = await prisma.$transaction(async (tx) => {
+    const updatedRequest = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
       const targetRequest = await findCareRequestById(careRequestId, tx);
