@@ -4,18 +4,15 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import AppError from "../errors/app-error.js";
 import { isUserRole, type AuthUser, type UserRole } from "../types/auth.js";
+import { parseBigId } from "../utils/bigint.js";
 
 function parseAuthUser(payload: jwt.JwtPayload): AuthUser | null {
   const { sub, role } = payload;
-  if (typeof sub !== "string" || !/^\d+$/.test(sub) || !isUserRole(role)) {
+  const id = parseBigId(sub);
+  if (id === null || !isUserRole(role)) {
     return null;
   }
-
-  try {
-    return { id: BigInt(sub), role };
-  } catch {
-    return null;
-  }
+  return { id, role };
 }
 
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
