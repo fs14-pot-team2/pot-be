@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import * as authService from "../services/auth-service.js";
-import { setRefreshTokenCookie } from "../utils/auth-cookie.js";
+import { clearRefreshTokenCookie, setRefreshTokenCookie } from "../utils/auth-cookie.js";
 import { serializeBigInt } from "../utils/bigint.js";
 import { signAccessToken, signRefreshToken } from "../utils/jwt.js";
 import { validateLogin, validateSignup } from "../validators/auth-validator.js";
@@ -36,4 +36,9 @@ export async function login(req: Request, res: Response, next: NextFunction) {
   } catch (error) {
     next(error);
   }
+}
+
+export function logout(_req: Request, res: Response) {
+  clearRefreshTokenCookie(res);
+  res.status(200).json({ message: "로그아웃되었습니다." });
 }
