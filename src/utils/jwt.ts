@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 
 import { env } from "../config/env.js";
 import { isUserRole, type UserRole } from "../types/auth.js";
+import { parseBigId } from "./bigint.js";
 
 const ACCESS_TOKEN_EXPIRES_IN = "30m";
 const REFRESH_TOKEN_EXPIRES_IN = "7d";
@@ -31,7 +32,7 @@ export function verifyRefreshToken(token: string): TokenPayload | null {
     if (typeof decoded === "string") return null;
 
     const { sub, role } = decoded;
-    if (typeof sub !== "string" || !/^\d+$/.test(sub) || !isUserRole(role)) {
+    if (typeof sub !== "string" || parseBigId(sub) === null || !isUserRole(role)) {
       return null;
     }
     return { sub, role };
