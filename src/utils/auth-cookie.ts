@@ -18,3 +18,7 @@ export function setRefreshTokenCookie(res: Response, token: string) {
     maxAge: REFRESH_TOKEN_MAX_AGE_MS,
   });
 }
+
+export function clearRefreshTokenCookie(res: Response) {
+  res.clearCookie(REFRESH_COOKIE_NAME, baseOptions());
+}
