@@ -65,25 +65,25 @@ export async function createCareRequest(ownerId: bigint, careRequestData: Create
   }
 }
 
-// 팟오너의 활성 돌봄 요청 조회
+// 팟오너의 활성 돌봄 요청 존재 여부 조회
 export async function getActiveCareRequest(ownerId: bigint) {
-  const openRequest = await findOpenCareRequest(ownerId);
+  const initialOpenRequest = await findOpenCareRequest(ownerId);
 
-  if (!openRequest) {
+  if (!initialOpenRequest) {
     return null;
   }
 
   try {
-    const wasExpired = await expireCareRequestIfPast(openRequest);
+    const wasExpired = await expireCareRequestIfPast(initialOpenRequest);
 
-    return wasExpired ? null : openRequest;
+    return wasExpired ? null : initialOpenRequest;
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "P2025")) {
       throw error;
     }
 
-    // 동시 상태 변경으로 인한 충돌 시 기존 요청의 상태와 현재 활성 요청을 재확인
-    const refreshedRequest = await findCareRequestById(openRequest.id);
+    // 만료 처리 충돌 시 최초 조회한 요청과 현재 활성 요청을 재확인
+    const refreshedRequest = await findCareRequestById(initialOpenRequest.id);
 
     if (!refreshedRequest || refreshedRequest.status === "OPEN") {
       throw error;
