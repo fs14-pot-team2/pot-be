@@ -1,4 +1,4 @@
-import type { Response } from "express";
+import type { Request, Response } from "express";
 
 import { env } from "../config/env.js";
 import { REFRESH_TOKEN_MAX_AGE_MS } from "./jwt.js";
@@ -21,4 +21,9 @@ export function setRefreshTokenCookie(res: Response, token: string) {
 
 export function clearRefreshTokenCookie(res: Response) {
   res.clearCookie(REFRESH_COOKIE_NAME, baseOptions());
+}
+
+export function getRefreshTokenFromCookie(req: Request): string | undefined {
+  const token = req.cookies?.[REFRESH_COOKIE_NAME];
+  return typeof token === "string" && token.length > 0 ? token : undefined;
 }
