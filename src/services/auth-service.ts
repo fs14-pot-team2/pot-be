@@ -1,7 +1,7 @@
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
-import { hashPassword } from "../utils/password.js";
-import type { SignupInput } from "../validators/auth-validator.js";
+import { hashPassword, verifyPassword } from "../utils/password.js";
+import type { LoginInput, SignupInput } from "../validators/auth-validator.js";
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -48,4 +48,32 @@ export async function signup(input: SignupInput) {
     }
     throw error;
   }
+}
+
+export async function login(input: LoginInput) {
+  const { email, password, role } = input;
+
+  const user = await prisma.user.findUnique({
+    where: { email_role: { email, role } },
+    select: {
+      id: true,
+      email: true,
+      nickname: true,
+      role: true,
+      createdAt: true,
+      passwordHash: true,
+    },
+  });
+
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    throw new AppError("INVALID_CREDENTIALS");
+  }
+
+  return {
+    id: user.id,
+    email: user.email,
+    nickname: user.nickname,
+    role: user.role,
+    createdAt: user.createdAt,
+  };
 }
