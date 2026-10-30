@@ -1,9 +1,7 @@
 import { prisma } from "../config/prisma.js";
 import { CareRequestStatus } from "../generated/prisma/enums.js";
-import type { Prisma } from "../generated/prisma/client.js";
+import type { DbClient } from "../types/db.js";
 import type { CreateCareRequestInput } from "../validators/care-request-validator.js";
-
-export type DbClient = typeof prisma | Prisma.TransactionClient;
 
 // 팟오너의 활성 돌봄 요청 조회
 export function findOpenCareRequest(ownerId: bigint, db: DbClient = prisma) {

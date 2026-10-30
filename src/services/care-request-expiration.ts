@@ -3,7 +3,7 @@
 import { prisma } from "../config/prisma.js";
 import { CareRequestStatus } from "../generated/prisma/enums.js";
 import { expireCareRequest } from "../repositories/care-request-repository.js";
-import type { DbClient } from "../repositories/care-request-repository.js";
+import type { DbClient } from "../types/db.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 
 interface CareRequestForExpiration {
