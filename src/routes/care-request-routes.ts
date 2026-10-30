@@ -3,7 +3,7 @@ import {
   createCareRequestController,
   getActiveCareRequestController,
 } from "../controllers/care-request-controller.js";
-import { authenticate, authorize } from "../middlewares/auth.js";
+import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
 export const careRequestRouter = Router();
 
