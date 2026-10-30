@@ -15,6 +15,13 @@ export function findOpenCareRequest(ownerId: bigint, db: DbClient = prisma) {
   });
 }
 
+// 돌봄 요청 ID 기준 조회
+export function findCareRequestById(careRequestId: bigint, db: DbClient = prisma) {
+  return db.careRequest.findUnique({
+    where: { id: careRequestId },
+  });
+}
+
 // 특정 돌봄 요청을 EXPIRED 상태로 변경 (돌봄시작일 만료 정책)
 export function expireCareRequest(careRequestId: bigint, db: DbClient = prisma) {
   return db.careRequest.update({
