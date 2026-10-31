@@ -18,11 +18,15 @@ import {
 } from "../validators/care-request-validator.js";
 
 // 팟오너의 신규 돌봄 요청 생성
-export async function createCareRequest(ownerId: bigint, careRequestData: CreateCareRequestInput) {
+export async function createCareRequest(
+  ownerId: bigint,
+  careRequestData: CreateCareRequestInput,
+  runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
+) {
   let initialOpenRequestId: bigint | null = null;
 
   const createInTransaction = () =>
-    prisma.$transaction(async (tx) => {
+    runTransaction(async (tx) => {
       const openRequest = await findOpenCareRequest(ownerId, tx);
 
       if (openRequest) {
