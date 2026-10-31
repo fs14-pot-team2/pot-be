@@ -84,6 +84,7 @@ DB를 처음 실행하기 전에 `.env.example`을 복사한 `.env` 파일에서
 - 들여쓰기 2칸, 큰따옴표, 세미콜론을 사용합니다.
 - 커밋과 PR 제목은 `feat/fix/refactor/chore/style/test: 한글 설명` 형식을 사용합니다.
 - 제품 코드 변경 없이 테스트 코드를 추가하거나 수정할 때는 `test` 타입을 사용합니다.
+- DB 연결이 필요 없는 단위 테스트는 `*.unit.test.ts`, PostgreSQL을 사용하는 통합 테스트는 `*.integration.test.ts`로 작성합니다.
 
 ```bash
 npm run lint
@@ -91,9 +92,12 @@ npm run format:check
 npm run prisma:validate
 npm run typecheck
 npm run build
+npm run test:unit
 ```
 
 `npm ci`로 설치하면 Husky가 설정되어 커밋 전에 변경 파일 검사와 커밋 메시지 검사가 실행됩니다. GitHub Actions도 `main`·`develop` 대상 PR과 해당 브랜치의 push에서 품질 검사를 수행합니다. 검사에서 실패하면 로그를 확인하고 수정한 뒤 다시 push하세요.
+
+DB 통합 테스트는 GitHub Actions가 작업마다 생성하는 임시 PostgreSQL에 마이그레이션을 적용한 뒤 실행합니다. 테스트 데이터는 각 테스트가 직접 준비하며 시딩 데이터, 개인 로컬 DB, 운영 RDS를 사용하지 않습니다. 임시 DB는 외부 포트를 열지 않고 작업이 끝나면 함께 삭제됩니다. `main` 배포는 품질 검사와 DB 통합 검사가 모두 성공해야 실행됩니다.
 
 ## 도움과 관련 저장소
 
