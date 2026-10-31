@@ -7,7 +7,7 @@ import type { Prisma } from "../src/generated/prisma/client.js";
 import { createCareRequest } from "../src/services/care-request-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
-// 테스트에 사용할 KST 기준 미래 날짜
+// 테스트에 사용할 KST 기준 날짜
 function futureDate(days: number) {
   const date = new Date(`${getTodayInKst()}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
