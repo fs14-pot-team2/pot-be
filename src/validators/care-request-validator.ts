@@ -104,7 +104,7 @@ function validateDate(value: unknown): string {
   return value;
 }
 
-function validateCareDates(
+export function validateCareDates(
   startDateValue: unknown,
   endDateValue: unknown,
 ): { startDate: string; endDate: string } {
@@ -116,6 +116,55 @@ function validateCareDates(
   }
 
   return { startDate, endDate };
+}
+
+export type UpdateCareRequestInput = Partial<Omit<CreateCareRequestInput, "region">>;
+
+// 돌봄 요청 수정 입력값 검증
+export function validateUpdateCareRequest(body: unknown): UpdateCareRequestInput {
+  if (!isRequestBodyObject(body)) {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  const careRequestData: UpdateCareRequestInput = {};
+
+  if ("serviceType" in body) {
+    careRequestData.serviceType = validateServiceType(body.serviceType);
+  }
+
+  if ("startDate" in body) {
+    careRequestData.startDate = validateDate(body.startDate);
+  }
+
+  if ("endDate" in body) {
+    careRequestData.endDate = validateDate(body.endDate);
+  }
+
+  if ("zonecode" in body) {
+    careRequestData.zonecode = validateZonecode(body.zonecode);
+  }
+
+  if ("address" in body) {
+    careRequestData.address = requireString(body.address);
+  }
+
+  if ("detailAddress" in body) {
+    careRequestData.detailAddress = optionalString(body.detailAddress);
+  }
+
+  if ("sido" in body) {
+    careRequestData.sido = requireString(body.sido);
+  }
+
+  if ("sigungu" in body) {
+    careRequestData.sigungu = requireString(body.sigungu);
+  }
+
+  if ("bname" in body) {
+    careRequestData.bname = optionalString(body.bname);
+  }
+
+  return careRequestData;
 }
 
 export function validateCreateCareRequest(body: unknown): CreateCareRequestInput {
