@@ -7,13 +7,18 @@
     "npm": ">=11 <12"
   },
   "packageManager": "npm@11.13.0",
+  "overrides": {
+    "minimatch": "11.0.1"
+  },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "npm run test:unit",
+    "test:unit": "tsx --test tests/*.unit.test.ts",
+    "test:integration": "tsx --test tests/*.integration.test.ts",
     "prepare": "husky",
     "commitlint": "commitlint",
     "dev": "tsx watch src/index.ts",
