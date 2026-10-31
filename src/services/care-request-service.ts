@@ -79,7 +79,11 @@ export async function createCareRequest(
 }
 
 // 팟오너의 활성 돌봄 요청 존재 여부 조회
-export async function getActiveCareRequest(ownerId: bigint) {
+// P2025 충돌 복구 테스트에서 만료 처리 함수를 주입하기 위해 매개변수화
+export async function getActiveCareRequest(
+  ownerId: bigint,
+  expireCareRequestIfPastFn: typeof expireCareRequestIfPast = expireCareRequestIfPast,
+) {
   const initialOpenRequest = await findOpenCareRequest(ownerId);
 
   if (!initialOpenRequest) {
@@ -87,7 +91,7 @@ export async function getActiveCareRequest(ownerId: bigint) {
   }
 
   try {
-    const wasExpired = await expireCareRequestIfPast(initialOpenRequest);
+    const wasExpired = await expireCareRequestIfPastFn(initialOpenRequest);
 
     return wasExpired ? null : initialOpenRequest;
   } catch (error) {
@@ -108,7 +112,7 @@ export async function getActiveCareRequest(ownerId: bigint) {
       return null;
     }
 
-    const wasExpired = await expireCareRequestIfPast(latestOpenRequest);
+    const wasExpired = await expireCareRequestIfPastFn(latestOpenRequest);
 
     return wasExpired ? null : latestOpenRequest;
   }
