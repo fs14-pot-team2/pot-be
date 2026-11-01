@@ -47,9 +47,38 @@ jobs:
           npx --no-install commitlint --from "$BASE_SHA" --to "$HEAD_SHA" --verbose
           printf '%s\n' "$PR_TITLE" | npx --no-install commitlint
 
+  integration-test:
+    name: integration-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: node:24-bookworm-slim
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: pot_test
+        options: >-
+          --health-cmd="pg_isready -U postgres -d pot_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:ci_test_password@postgres:5432/pot_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npm run test:integration
+
   deploy:
     name: deploy
-    needs: quality
+    needs: [quality, integration-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
