@@ -186,6 +186,11 @@ export const ERROR_DEFINITIONS = {
     message: "견적을 받은 돌봄 요청은 수정할 수 없습니다.",
     statusCode: 409,
   },
+  CARE_REQUEST_STATUS_NOT_EDITABLE: {
+    code: "CARE_REQUEST_STATUS_NOT_EDITABLE",
+    message: "진행 중인 돌봄 요청만 수정할 수 있습니다.",
+    statusCode: 409,
+  },
   CARE_REQUEST_ALREADY_CANCELED: {
     code: "CARE_REQUEST_ALREADY_CANCELED",
     message: "이미 취소된 돌봄 요청입니다.",

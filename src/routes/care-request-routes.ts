@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createCareRequestController,
   getActiveCareRequestController,
+  updateCareRequestController,
 } from "../controllers/care-request-controller.js";
 import { authenticate, authorize } from "../middlewares/auth.js";
 
@@ -16,4 +17,12 @@ careRequestRouter.get(
   authenticate,
   authorize("OWNER"),
   getActiveCareRequestController,
+);
+
+// 팟오너의 돌봄 요청 수정
+careRequestRouter.patch(
+  "/:careRequestId",
+  authenticate,
+  authorize("OWNER"),
+  updateCareRequestController,
 );
