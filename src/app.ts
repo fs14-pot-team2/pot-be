@@ -5,6 +5,7 @@ import express from "express";
 import { careRequestRouter } from "./routes/care-request-routes.js";
 import { errorMiddleware } from "./middlewares/error-middleware.js";
 import authRoutes from "./routes/auth-routes.js";
+import { profileRouter } from "./routes/profile-routes.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -19,5 +20,5 @@ app.get("/health", (_request, response) => {
 app.use("/care-requests", careRequestRouter);
 
 app.use("/auth", authRoutes);
-
+app.use(profileRouter);
 app.use(errorMiddleware);
