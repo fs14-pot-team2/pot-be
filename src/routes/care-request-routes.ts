@@ -4,6 +4,7 @@ import {
   getActiveCareRequestController,
   updateCareRequestController,
 } from "../controllers/care-request-controller.js";
+import { createDesignatedRequestController } from "../controllers/designated-request-controller.js";
 import { authenticate, authorize } from "../middlewares/auth.js";
 
 export const careRequestRouter = Router();
@@ -25,4 +26,12 @@ careRequestRouter.patch(
   authenticate,
   authorize("OWNER"),
   updateCareRequestController,
+);
+
+// 팟오너의 지정 요청 생성
+careRequestRouter.post(
+  "/:careRequestId/designated-requests",
+  authenticate,
+  authorize("OWNER"),
+  createDesignatedRequestController,
 );
