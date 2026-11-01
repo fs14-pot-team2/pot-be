@@ -12,13 +12,14 @@ import {
 import { updateCareRequest } from "../src/services/care-request-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
-// 각 테스트에서 사용할 독립적인 돌봄 요청 생성
+// 테스트에 사용할 KST 기준 날짜
 function futureDate(days: number) {
   const date = new Date(`${getTodayInKst()}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
+// 각 테스트에서 사용할 독립적인 팟오너와 돌봄 요청 생성
 async function createTestRequest(startDate = futureDate(7)) {
   const uniqueId = randomUUID();
 
@@ -52,15 +53,18 @@ async function createTestRequest(startDate = futureDate(7)) {
   return { ownerId: owner.id, careRequestId: request.id };
 }
 
-// Service 에러 코드와 Prisma 충돌 오류 검증에 사용하는 공통 함수
-function assertAppError(code: string) {
-  return (error: unknown) => error instanceof AppError && error.code === code;
+// 도메인 오류 코드와 HTTP 상태 코드 확인
+function assertAppError(code: string, statusCode = 409) {
+  return (error: unknown) =>
+    error instanceof AppError && error.code === code && error.statusCode === statusCode;
 }
 
+// Prisma P2025 원본 오류 전달 확인
 function assertP2025(error: unknown) {
   return error instanceof Error && "code" in error && error.code === "P2025";
 }
 
+// Prisma P2025 충돌 오류 생성
 function createP2025Error() {
   return Object.assign(new Error("Record not found"), {
     code: "P2025",
@@ -68,7 +72,7 @@ function createP2025Error() {
 }
 
 describe("돌봄 요청 수정", () => {
-  describe("부분 수정 및 수정 가능 조건별 처리", () => {
+  describe("수정 조건 (부분 수정 포함)", () => {
     // 전달한 필드만 수정하고 생략한 필드와 요청 상태 유지 확인
     it("부분 수정 결과가 DB에 저장되고 기존 값은 유지된다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
@@ -100,7 +104,7 @@ describe("돌봄 요청 수정", () => {
       assert.equal(updatedRequest.status, "OPEN");
     });
 
-    // 수정 불가 상태에 따른 공통 에러 반환 확인
+    // 수정 불가 상태에 따른 도메인 오류 반환 확인
     it("MATCHED, CANCELED, EXPIRED 요청은 수정할 수 없다", async () => {
       for (const status of ["MATCHED", "CANCELED", "EXPIRED"] as const) {
         const { ownerId, careRequestId } = await createTestRequest();
@@ -146,7 +150,7 @@ describe("돌봄 요청 수정", () => {
         updateCareRequest(ownerId, careRequestId, {
           endDate: futureDate(3),
         }),
-        assertAppError("INVALID_CARE_DATE"),
+        assertAppError("INVALID_CARE_DATE", 400),
       );
 
       const savedRequest = await prisma.careRequest.findUniqueOrThrow({
@@ -242,7 +246,7 @@ describe("돌봄 요청 수정", () => {
   });
 
   describe("동시 상태 변경 충돌 복구", () => {
-    // P2025 발생 후 최초 요청의 최신 상태에 따른 도메인 에러 변환 확인
+    // P2025 발생 후 최초 요청의 최신 상태에 따른 도메인 오류 변환 확인
     for (const status of ["EXPIRED", "MATCHED", "CANCELED"] as const) {
       it(`P2025 이후 ${status} 상태면 수정 불가 에러를 반환한다`, async () => {
         const { ownerId, careRequestId } = await createTestRequest();
@@ -263,8 +267,8 @@ describe("돌봄 요청 수정", () => {
       });
     }
 
-    // P2025 이후에도 상태가 OPEN이면 원래 Prisma 오류를 유지하는지 확인
-    it("P2025 이후 OPEN 상태면 기존 오류를 전달한다", async () => {
+    // P2025 이후에도 상태가 OPEN이면 원본 Prisma 오류를 유지하는지 확인
+    it("P2025 이후 OPEN 상태면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const runTransaction = async () => {
@@ -277,8 +281,8 @@ describe("돌봄 요청 수정", () => {
       );
     });
 
-    // P2025 이후 최초 요청이 사라진 경우에도 기존 오류를 유지하는지 확인
-    it("P2025 이후 요청이 없으면 기존 오류를 전달한다", async () => {
+    // P2025 이후 최초 요청이 삭제되면 원본 Prisma 오류를 유지하는지 확인
+    it("P2025 이후 요청이 없으면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const runTransaction = async () => {

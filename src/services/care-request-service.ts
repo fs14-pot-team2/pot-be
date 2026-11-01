@@ -1,6 +1,7 @@
 import { prisma } from "../config/prisma.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import AppError from "../errors/app-error.js";
+import type { TransactionRunner } from "../types/db.js";
 import {
   findCareRequestById,
   findOpenCareRequest,
@@ -11,6 +12,7 @@ import {
 } from "../repositories/care-request-repository.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { toRegion } from "../utils/region.js";
+import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import {
   validateCareDates,
   type CreateCareRequestInput,
@@ -70,7 +72,7 @@ export async function createCareRequest(
       return await createInTransaction();
     }
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "P2002") {
+    if (getUniqueConstraintName(error) === "CareRequest_one_open_per_owner_idx") {
       throw new AppError("ACTIVE_CARE_REQUEST_ALREADY_EXISTS");
     }
 
@@ -117,8 +119,6 @@ export async function getActiveCareRequest(
     return wasExpired ? null : latestOpenRequest;
   }
 }
-
-type TransactionRunner = <T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) => Promise<T>;
 
 // 팟오너의 돌봄 요청 수정
 export async function updateCareRequest(
