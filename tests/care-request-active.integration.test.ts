@@ -21,12 +21,12 @@ function createP2025Error() {
   });
 }
 
-// P2025 오류가 그대로 전달되는지 확인
+// Prisma P2025 원본 오류 전달 확인
 function assertP2025(error: unknown) {
   return error instanceof Error && "code" in error && error.code === "P2025";
 }
 
-// 각 테스트에서 사용할 독립적인 팟오너와 만료 대상 요청 생성
+// 각 테스트에서 사용할 독립적인 팟오너와 만료 대상 돌봄 요청 생성
 async function createTestRequest() {
   const uniqueId = randomUUID();
 
@@ -85,7 +85,7 @@ async function replaceOpenRequest(ownerId: bigint, careRequestId: bigint, startD
   });
 }
 
-describe("활성 돌봄 요청 조회", () => {
+describe("활성 돌봄 요청 존재 여부 조회", () => {
   describe("동시 상태 변경 충돌 복구", () => {
     // 최초 요청의 상태 변경 후 다른 활성 요청이 없으면 null 반환 확인
     for (const status of ["EXPIRED", "MATCHED", "CANCELED"] as const) {
@@ -178,8 +178,8 @@ describe("활성 돌봄 요청 조회", () => {
       assert.equal(savedRequest.status, "EXPIRED");
     });
 
-    // 최초 요청이 계속 OPEN인 경우 원래 Prisma 오류 유지 확인
-    it("P2025 이후 최초 요청이 OPEN 상태면 기존 오류를 전달한다", async () => {
+    // P2025 이후 최초 요청이 OPEN 상태면 원본 Prisma 오류를 유지하는지 확인
+    it("P2025 이후 최초 요청이 OPEN 상태면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const expireCareRequestIfPastFn: typeof expireCareRequestIfPast = async () => {
@@ -195,8 +195,8 @@ describe("활성 돌봄 요청 조회", () => {
       assert.equal(savedRequest.status, "OPEN");
     });
 
-    // 최초 요청이 삭제된 경우 원래 Prisma 오류 유지 확인
-    it("P2025 이후 최초 요청이 삭제되면 기존 오류를 전달한다", async () => {
+    // P2025 이후 최초 요청이 삭제되면 원본 Prisma 오류를 유지하는지 확인
+    it("P2025 이후 최초 요청이 삭제되면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const expireCareRequestIfPastFn: typeof expireCareRequestIfPast = async () => {
@@ -217,7 +217,7 @@ describe("활성 돌봄 요청 조회", () => {
     });
 
     // 재조회한 활성 요청에서도 P2025가 발생하면 추가 복구하지 않는지 확인
-    it("새 활성 요청의 만료 처리에서도 P2025가 발생하면 기존 오류를 전달한다", async () => {
+    it("새 활성 요청의 만료 처리에서도 P2025가 발생하면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
       let expirationCount = 0;
       let newRequestId: bigint | null = null;

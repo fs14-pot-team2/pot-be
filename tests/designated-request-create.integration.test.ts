@@ -15,17 +15,24 @@ function futureDate(days: number) {
   return new Date(date.toISOString().slice(0, 10));
 }
 
-// Prisma 충돌 오류를 의도적으로 발생시키기 위한 테스트 함수
+// Prisma P2025 충돌 오류 생성
 function createP2025Error() {
-  return Object.assign(new Error("Record not found"), { code: "P2025" });
+  return Object.assign(new Error("Record not found"), {
+    code: "P2025",
+  });
 }
 
+// Prisma P2002 UNIQUE 제약 충돌 오류 생성
 function createP2002Error(constraintName: string) {
   return Object.assign(new Error("Unique constraint failed"), {
     code: "P2002",
     meta: {
       driverAdapterError: {
-        cause: { constraint: { index: constraintName } },
+        cause: {
+          constraint: {
+            index: constraintName,
+          },
+        },
       },
     },
   });
@@ -83,7 +90,17 @@ function assertAppError(code: string, statusCode = 409) {
     error instanceof AppError && error.code === code && error.statusCode === statusCode;
 }
 
-// Prisma P2025 오류를 그대로 전달하는지 확인
+// Prisma P2002 원본 오류 전달 확인
+function assertP2002(error: unknown) {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "P2002" &&
+    !(error instanceof AppError)
+  );
+}
+
+// Prisma P2025 원본 오류 전달 확인
 function assertP2025(error: unknown) {
   return error instanceof Error && "code" in error && error.code === "P2025";
 }
@@ -240,8 +257,40 @@ describe("지정 요청 생성", () => {
     });
   });
 
-  describe("Prisma 충돌 복구", () => {
-    // P2025 이후 최초 요청 상태가 변경됐다면 활성 요청 없음 오류로 변환
+  describe("UNIQUE 제약 충돌 처리", () => {
+    // P2002 지정 요청 복합 UNIQUE 제약 충돌 시 중복 지정 도메인 오류 변환 확인
+    it("P2002 지정 요청 복합 UNIQUE 충돌은 중복 지정 오류로 변환한다", async () => {
+      const { ownerId, careRequestId, sitterIds } = await createTestRequest();
+      const runTransaction = async () => {
+        throw createP2002Error("DesignatedRequest_careRequestId_sitterId_key");
+      };
+
+      await assert.rejects(
+        createDesignatedRequest(ownerId, careRequestId, sitterIds[0], runTransaction),
+        assertAppError("DESIGNATED_REQUEST_ALREADY_EXISTS"),
+      );
+
+      assert.equal(await prisma.designatedRequest.count({ where: { careRequestId } }), 0);
+    });
+
+    // P2002 다른 UNIQUE 제약 충돌 시 원본 Prisma 오류 유지 확인
+    it("P2002 다른 UNIQUE 제약 충돌은 원본 Prisma 오류를 전달한다", async () => {
+      const { ownerId, careRequestId, sitterIds } = await createTestRequest();
+      const runTransaction = async () => {
+        throw createP2002Error("User_email_role_key");
+      };
+
+      await assert.rejects(
+        createDesignatedRequest(ownerId, careRequestId, sitterIds[0], runTransaction),
+        assertP2002,
+      );
+
+      assert.equal(await prisma.designatedRequest.count({ where: { careRequestId } }), 0);
+    });
+  });
+
+  describe("동시 상태 변경 충돌 복구", () => {
+    // P2025 이후 최초 요청 상태가 변경됐다면 활성 요청 없음 도메인 오류로 변환
     for (const status of ["EXPIRED", "MATCHED", "CANCELED"] as const) {
       it(`P2025 이후 최초 요청이 ${status} 상태면 지정 요청을 차단한다`, async () => {
         const { ownerId, careRequestId, sitterIds } = await createTestRequest();
@@ -266,8 +315,8 @@ describe("지정 요청 생성", () => {
       });
     }
 
-    // P2025 이후 최초 요청이 OPEN 상태면 기존 Prisma 오류 유지
-    it("P2025 이후 최초 요청이 OPEN 상태면 기존 오류를 전달한다", async () => {
+    // P2025 이후 최초 요청이 OPEN 상태면 원본 Prisma 오류 유지 확인
+    it("P2025 이후 최초 요청이 OPEN 상태면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId, sitterIds } = await createTestRequest();
       const runTransaction = async () => {
         throw createP2025Error();
@@ -281,8 +330,8 @@ describe("지정 요청 생성", () => {
       assert.equal(await prisma.designatedRequest.count({ where: { careRequestId } }), 0);
     });
 
-    // P2025 이후 최초 요청이 삭제되면 기존 Prisma 오류 유지
-    it("P2025 이후 최초 요청이 삭제되면 기존 오류를 전달한다", async () => {
+    // P2025 이후 최초 요청이 삭제되면 원본 Prisma 오류 유지 확인
+    it("P2025 이후 최초 요청이 삭제되면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId, sitterIds } = await createTestRequest();
       const runTransaction = async () => {
         await prisma.careRequest.delete({ where: { id: careRequestId } });
@@ -295,36 +344,6 @@ describe("지정 요청 생성", () => {
       );
 
       assert.equal(await prisma.careRequest.findUnique({ where: { id: careRequestId } }), null);
-    });
-
-    // 지정 요청 복합 UNIQUE 제약 충돌만 도메인 오류로 변환
-    it("P2002 지정 요청 복합 UNIQUE 충돌은 중복 지정 오류로 변환한다", async () => {
-      const { ownerId, careRequestId, sitterIds } = await createTestRequest();
-      const runTransaction = async () => {
-        throw createP2002Error("DesignatedRequest_careRequestId_sitterId_key");
-      };
-
-      await assert.rejects(
-        createDesignatedRequest(ownerId, careRequestId, sitterIds[0], runTransaction),
-        assertAppError("DESIGNATED_REQUEST_ALREADY_EXISTS"),
-      );
-
-      assert.equal(await prisma.designatedRequest.count({ where: { careRequestId } }), 0);
-    });
-
-    // 다른 UNIQUE 제약 충돌은 중복 지정 오류로 변환하지 않음
-    it("P2002 다른 UNIQUE 제약 충돌은 기존 오류를 전달한다", async () => {
-      const { ownerId, careRequestId, sitterIds } = await createTestRequest();
-      const runTransaction = async () => {
-        throw createP2002Error("User_email_role_key");
-      };
-
-      await assert.rejects(
-        createDesignatedRequest(ownerId, careRequestId, sitterIds[0], runTransaction),
-        (error: unknown) => error instanceof Error && "code" in error && error.code === "P2002",
-      );
-
-      assert.equal(await prisma.designatedRequest.count({ where: { careRequestId } }), 0);
     });
   });
 });
