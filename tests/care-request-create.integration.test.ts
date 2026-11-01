@@ -84,6 +84,7 @@ async function createTestRequest() {
 }
 
 // 최초 OPEN 요청 조회 후 만료 UPDATE에서 P2025가 발생하도록 재현
+// 현재 서비스 호출 흐름에 필요한 findFirst/update만 구현한 테스트용 트랜잭션 객체
 function createConflictTransaction(
   initialRequest: Awaited<ReturnType<typeof prisma.careRequest.findUniqueOrThrow>>,
 ) {
