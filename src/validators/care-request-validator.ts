@@ -118,6 +118,17 @@ export function validateCareDates(
   return { startDate, endDate };
 }
 
+// 돌봄 요청 수정 시 변경된 일정의 유효성 검증
+export function validateUpdatedCareDates(
+  startDateValue: string,
+  endDateValue: string,
+  hasStartDateChanged: boolean,
+): void {
+  if ((hasStartDateChanged && startDateValue <= getTodayInKst()) || startDateValue > endDateValue) {
+    throw new AppError("INVALID_CARE_DATE");
+  }
+}
+
 export type UpdateCareRequestInput = Partial<Omit<CreateCareRequestInput, "region">>;
 
 // 돌봄 요청 수정 입력값 검증

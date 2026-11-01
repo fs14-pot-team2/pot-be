@@ -14,7 +14,7 @@ import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { toRegion } from "../utils/region.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import {
-  validateCareDates,
+  validateUpdatedCareDates,
   type CreateCareRequestInput,
   type UpdateCareRequestInput,
 } from "../validators/care-request-validator.js";
@@ -159,12 +159,15 @@ export async function updateCareRequest(
         throw new AppError("CARE_REQUEST_EDIT_NOT_ALLOWED");
       }
 
-      const startDate =
-        careRequestData.startDate ?? targetRequest.startDate.toISOString().slice(0, 10);
+      if (careRequestData.startDate !== undefined || careRequestData.endDate !== undefined) {
+        // 날짜가 전달된 경우에만 유효성 검증
+        const startDate =
+          careRequestData.startDate ?? targetRequest.startDate.toISOString().slice(0, 10);
 
-      const endDate = careRequestData.endDate ?? targetRequest.endDate.toISOString().slice(0, 10);
+        const endDate = careRequestData.endDate ?? targetRequest.endDate.toISOString().slice(0, 10);
 
-      validateCareDates(startDate, endDate);
+        validateUpdatedCareDates(startDate, endDate, careRequestData.startDate !== undefined);
+      }
 
       const region =
         careRequestData.sido !== undefined ? toRegion(careRequestData.sido) : undefined;
