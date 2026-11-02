@@ -24,3 +24,12 @@ export async function updateOwnerProfileController(
     next(error);
   }
 }
+
+export async function getSitterProfileController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const profile = await profileService.getSitterProfile(req.user!.id);
+    res.status(200).json(profile);
+  } catch (error) {
+    next(error);
+  }
+}

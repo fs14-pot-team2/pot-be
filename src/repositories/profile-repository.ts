@@ -25,3 +25,22 @@ export const updateOwnerProfileByUserId = (userId: bigint, data: UpdateOwnerProf
     select: OWNER_PROFILE_SELECT,
   });
 };
+
+const SITTER_PROFILE_SELECT = {
+  id: true,
+  userId: true,
+  profileImageUrl: true,
+  gender: true,
+  shortIntroduction: true,
+  description: true,
+  sitterServices: { select: { serviceType: true }, orderBy: { id: "asc" } },
+  sitterServiceRegions: { select: { region: true }, orderBy: { id: "asc" } },
+} as const;
+
+// 팟트너 프로필 조회 (서비스 유형·지역 포함)
+export const findSitterProfileByUserId = (userId: bigint) => {
+  return prisma.sitterProfile.findUnique({
+    where: { userId },
+    select: SITTER_PROFILE_SELECT,
+  });
+};
