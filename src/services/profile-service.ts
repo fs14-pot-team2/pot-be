@@ -3,8 +3,9 @@ import {
   findOwnerProfileByUserId,
   findSitterProfileByUserId,
   updateOwnerProfileByUserId,
+  updateSitterProfileByUserId,
 } from "../repositories/profile-repository.js";
-import type { UpdateOwnerProfileInput } from "../types/profile.js";
+import type { UpdateOwnerProfileInput, UpdateSitterProfileInput } from "../types/profile.js";
 
 type OwnerProfileRecord = NonNullable<Awaited<ReturnType<typeof findOwnerProfileByUserId>>>;
 
@@ -75,4 +76,14 @@ export async function getSitterProfile(userId: bigint) {
   }
 
   return toSitterProfileResponse(profile);
+}
+
+export async function updateSitterProfile(userId: bigint, input: UpdateSitterProfileInput) {
+  const updated = await updateSitterProfileByUserId(userId, input);
+
+  if (!updated) {
+    throw new AppError("PROFILE_NOT_FOUND");
+  }
+
+  return toSitterProfileResponse(updated);
 }
