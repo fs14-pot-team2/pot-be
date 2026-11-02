@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { getOwnerProfileController } from "../controllers/profile-controller.js";
+import {
+  getOwnerProfileController,
+  updateOwnerProfileController,
+} from "../controllers/profile-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
 export const profileRouter = Router();
@@ -10,4 +13,12 @@ profileRouter.get(
   authenticate,
   authorize("OWNER"),
   getOwnerProfileController,
+);
+
+// 프로필 수정 - 팟오너
+profileRouter.patch(
+  "/owners/me/profile",
+  authenticate,
+  authorize("OWNER"),
+  updateOwnerProfileController,
 );
