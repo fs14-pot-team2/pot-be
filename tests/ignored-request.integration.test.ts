@@ -6,6 +6,7 @@ import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import { createDesignatedRequest } from "../src/services/designated-request-service.js";
 import { ignoreCareRequest } from "../src/services/ignored-request-service.js";
+import { updateSitterProfile } from "../src/services/profile-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 import { serializeDate } from "../src/utils/serialize-date.js";
 
@@ -101,8 +102,8 @@ async function createTestRequest() {
 
 describe("공개 돌봄 요청 숨김", () => {
   describe("UNIQUE 제약 충돌 처리", () => {
-    // P2002 숨김 요청 복합 UNIQUE 제약 충돌 시 중복 숨김 도메인 오류 변환 확인
-    it("P2002 발생 시 숨김 요청 중복 오류를 반환한다", async () => {
+    // P2002 요청 숨김 복합 UNIQUE 제약 충돌 시 중복 숨김 도메인 오류 변환 확인
+    it("P2002 발생 시 요청 숨김 중복 오류를 반환한다", async () => {
       const { sitterId, careRequestId } = await createTestRequest();
       const runTransaction = async () => {
         throw createP2002Error("IgnoredRequest_careRequestId_sitterId_key");
@@ -142,8 +143,8 @@ describe("공개 돌봄 요청 숨김", () => {
   });
 
   describe("동시성 및 트랜잭션", () => {
-    // 동일 팟트너의 동시 숨김 요청에서 하나만 생성되고 다른 요청은 중복 오류로 거부되는지 확인
-    it("동일 팟트너 동시 숨김 시 중복 생성을 방지한다", async () => {
+    // 동일 팟트너의 동시 요청 숨김 처리 시 하나만 성공하고 중복 숨김을 방지하는지 확인
+    it("동일 팟트너의 동시 요청 숨김 시 중복 생성을 방지한다", async () => {
       const { sitterId, careRequestId } = await createTestRequest();
 
       const results = await Promise.allSettled([
@@ -163,8 +164,8 @@ describe("공개 돌봄 요청 숨김", () => {
       assert.equal(await prisma.ignoredRequest.count({ where: { careRequestId, sitterId } }), 1);
     });
 
-    // 숨김과 지정 요청이 동시에 실행되어도 지정 요청은 한 건 생성되고 숨김 결과가 순서에 맞게 결정되는지 확인
-    it("숨김과 지정 요청이 동시에 실행되면 지정 요청을 생성하고 숨김 여부를 처리 순서에 따라 결정한다", async () => {
+    // 요청 숨김과 지정 요청이 동시에 실행될 때 지정 요청 생성 및 처리 순서에 따른 숨김 여부 확인
+    it("요청 숨김과 지정 요청이 동시에 실행되면 지정 요청을 생성하고 숨김 여부를 처리 순서에 따라 결정한다", async () => {
       const { ownerId, sitterId, careRequestId } = await createTestRequest();
 
       const [ignoredResult, designatedResult] = await Promise.allSettled([
@@ -189,8 +190,45 @@ describe("공개 돌봄 요청 숨김", () => {
         assert.equal(ignoredCount, 0);
       }
     });
-  });
 
-  // TODO: 팟트너 프로필 지역 수정에 동일한 SitterProfile 행 잠금이 적용되면
-  // 지역 변경과 숨김 처리의 동시 실행 및 잠금 이후 지역 재조회 검증 추가
+    // 서비스 지역 수정과 요청 숨김이 동시에 실행될 때 처리 순서에 따른 숨김 여부와 지역 변경 결과 확인
+    it("서비스 지역 수정과 요청 숨김이 동시에 실행되면 처리 순서에 따라 숨김 여부를 결정한다", async () => {
+      const { sitterId, careRequestId } = await createTestRequest();
+
+      const [profileResult, ignoredResult] = await Promise.allSettled([
+        updateSitterProfile(sitterId, {
+          serviceRegions: ["INCHEON"],
+        }),
+        ignoreCareRequest(sitterId, careRequestId),
+      ]);
+
+      // 프로필 수정 성공 확인
+      assert.equal(profileResult.status, "fulfilled");
+
+      const savedRegions = await prisma.sitterServiceRegion.findMany({
+        where: { sitterProfile: { userId: sitterId } },
+        select: { region: true },
+      });
+
+      assert.deepEqual(
+        savedRegions.map(({ region }) => region),
+        ["INCHEON"],
+      );
+
+      const ignoredCount = await prisma.ignoredRequest.count({
+        where: { careRequestId, sitterId },
+      });
+
+      if (ignoredResult.status === "fulfilled") {
+        // 요청 숨김이 먼저 완료된 경우 숨김 처리 및 서비스 지역 수정 성공 확인
+        assert.equal(ignoredCount, 1);
+        assert.equal(ignoredResult.value.careRequestId, careRequestId);
+        assert.equal(ignoredResult.value.sitterId, sitterId);
+      } else {
+        // 서비스 지역 수정이 먼저 완료된 경우 변경된 지역을 기준으로 요청 숨김 거부 확인
+        assert.ok(assertAppError("FORBIDDEN", 403)(ignoredResult.reason));
+        assert.equal(ignoredCount, 0);
+      }
+    });
+  });
 });
