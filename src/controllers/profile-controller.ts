@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import * as profileService from "../services/profile-service.js";
-import { validateUpdateOwnerProfile } from "../validators/profile-validator.js";
+import {
+  validateUpdateOwnerProfile,
+  validateUpdateSitterProfile,
+} from "../validators/profile-validator.js";
 
 export async function getOwnerProfileController(req: Request, res: Response, next: NextFunction) {
   try {
@@ -28,6 +31,20 @@ export async function updateOwnerProfileController(
 export async function getSitterProfileController(req: Request, res: Response, next: NextFunction) {
   try {
     const profile = await profileService.getSitterProfile(req.user!.id);
+    res.status(200).json(profile);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateSitterProfileController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const input = validateUpdateSitterProfile(req.body);
+    const profile = await profileService.updateSitterProfile(req.user!.id, input);
     res.status(200).json(profile);
   } catch (error) {
     next(error);
