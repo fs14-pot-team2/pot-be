@@ -4,5 +4,12 @@ import { prisma } from "../config/prisma.js";
 export const findOwnerProfileByUserId = (userId: bigint) => {
   return prisma.ownerProfile.findUnique({
     where: { userId },
+    select: {
+      id: true,
+      userId: true,
+      profileImageUrl: true,
+      preferredServiceTypes: true,
+      livingRegion: true,
+    },
   });
 };
