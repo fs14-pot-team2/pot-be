@@ -18,10 +18,18 @@ function parsePositiveInteger(value: unknown, defaultValue: number): number {
   return parsed;
 }
 
-// 페이지 기반 목록 조회의 공통 입력값 검증 (pageSize 최대값은 별도 정책이 없어 제한하지 않음)
+const MAX_PAGE_SIZE = 100;
+
+// 페이지 기반 목록 조회의 공통 입력값 검증
 export function validatePagination(page: unknown, pageSize: unknown, defaultPageSize = 8) {
+  const validatedPageSize = parsePositiveInteger(pageSize, defaultPageSize);
+
+  if (validatedPageSize > MAX_PAGE_SIZE) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
   return {
     page: parsePositiveInteger(page, 1),
-    pageSize: parsePositiveInteger(pageSize, defaultPageSize),
+    pageSize: validatedPageSize,
   };
 }
