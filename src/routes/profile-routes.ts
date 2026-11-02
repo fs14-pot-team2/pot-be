@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getOwnerProfileController } from "../controllers/profile-controller.js";
-import { authenticate, authorize } from "../middlewares/auth.js";
+import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
 export const profileRouter = Router();
 
