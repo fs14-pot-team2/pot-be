@@ -3,7 +3,7 @@ import {
   findOwnerProfileByUserId,
   updateOwnerProfileByUserId,
 } from "../repositories/profile-repository.js";
-import type { UpdateOwnerProfileInput } from "../validators/profile-validator.js";
+import type { UpdateOwnerProfileInput } from "../types/profile.js";
 
 type OwnerProfileRecord = NonNullable<Awaited<ReturnType<typeof findOwnerProfileByUserId>>>;
 

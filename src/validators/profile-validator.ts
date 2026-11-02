@@ -1,11 +1,6 @@
 import AppError from "../errors/app-error.js";
 import { Region, ServiceType } from "../generated/prisma/enums.js";
-
-export interface UpdateOwnerProfileInput {
-  profileImageUrl?: string | null;
-  preferredServiceTypes?: ServiceType[];
-  livingRegion?: Region | null;
-}
+import type { UpdateOwnerProfileInput } from "../types/profile.js";
 
 const MAX_SERVICE_TYPES = 2;
 const MAX_PROFILE_IMAGE_URL_LENGTH = 2048;
@@ -43,8 +38,11 @@ export function validateServiceTypes(value: unknown): ServiceType[] {
   if (value.length > MAX_SERVICE_TYPES) {
     throw new AppError("TOO_MANY_SERVICE_TYPES");
   }
-  // 중복 값은 제거
-  return [...new Set(value)];
+  // 같은 유형은 중복 선택할 수 없음
+  if (new Set(value).size !== value.length) {
+    throw new AppError("INVALID_SERVICE_TYPE");
+  }
+  return value;
 }
 
 export function validateRegion(value: unknown): Region | null {

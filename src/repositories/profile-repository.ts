@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma.js";
-import type { UpdateOwnerProfileInput } from "../validators/profile-validator.js";
+import type { UpdateOwnerProfileInput } from "../types/profile.js";
 
 const OWNER_PROFILE_SELECT = {
   id: true,
