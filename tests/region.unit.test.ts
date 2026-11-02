@@ -5,7 +5,7 @@ import { Region } from "../src/generated/prisma/enums.js";
 import AppError from "../src/errors/app-error.js";
 import { toRegion } from "../src/utils/region.js";
 
-describe("toRegion", () => {
+describe("지역 변환", () => {
   const regionCases: {
     region: Region;
     sidoNames: string[];
