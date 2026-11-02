@@ -1,7 +1,9 @@
 import { Router } from "express";
 import {
   getOwnerProfileController,
+  getSitterProfileController,
   updateOwnerProfileController,
+  updateSitterProfileController,
 } from "../controllers/profile-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
@@ -21,4 +23,20 @@ profileRouter.patch(
   authenticate,
   authorize("OWNER"),
   updateOwnerProfileController,
+);
+
+// 프로필 조회 - 팟트너
+profileRouter.get(
+  "/sitters/me/profile",
+  authenticate,
+  authorize("SITTER"),
+  getSitterProfileController,
+);
+
+// 프로필 수정 - 팟트너
+profileRouter.patch(
+  "/sitters/me/profile",
+  authenticate,
+  authorize("SITTER"),
+  updateSitterProfileController,
 );

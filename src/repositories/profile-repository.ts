@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma.js";
-import type { UpdateOwnerProfileInput } from "../types/profile.js";
+import type { UpdateOwnerProfileInput, UpdateSitterProfileInput } from "../types/profile.js";
 
 const OWNER_PROFILE_SELECT = {
   id: true,
@@ -23,5 +23,72 @@ export const updateOwnerProfileByUserId = (userId: bigint, data: UpdateOwnerProf
     where: { userId },
     data,
     select: OWNER_PROFILE_SELECT,
+  });
+};
+
+const SITTER_PROFILE_SELECT = {
+  id: true,
+  userId: true,
+  profileImageUrl: true,
+  gender: true,
+  shortIntroduction: true,
+  description: true,
+  sitterServices: { select: { serviceType: true }, orderBy: { id: "asc" } },
+  sitterServiceRegions: { select: { region: true }, orderBy: { id: "asc" } },
+} as const;
+
+// 팟트너 프로필 조회 (서비스 유형·지역 포함)
+export const findSitterProfileByUserId = (userId: bigint) => {
+  return prisma.sitterProfile.findUnique({
+    where: { userId },
+    select: SITTER_PROFILE_SELECT,
+  });
+};
+
+// 팟트너 프로필 수정: 공개 요청 숨김과 같은 SitterProfile 행 잠금
+export const updateSitterProfileByUserId = (userId: bigint, input: UpdateSitterProfileInput) => {
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ id: bigint }[]>`
+      SELECT "id"
+      FROM "SitterProfile"
+      WHERE "userId" = ${userId}
+      FOR UPDATE
+    `;
+
+    if (locked.length === 0) {
+      return null;
+    }
+
+    const sitterProfileId = locked[0].id;
+
+    // undefined 필드는 무시되고, 빈 body여도 update되어 updatedAt이 갱신됨
+    await tx.sitterProfile.update({
+      where: { id: sitterProfileId },
+      data: {
+        profileImageUrl: input.profileImageUrl,
+        description: input.description,
+        gender: input.gender,
+        shortIntroduction: input.shortIntroduction,
+      },
+    });
+
+    if (input.serviceTypes) {
+      await tx.sitterService.deleteMany({ where: { sitterProfileId } });
+      await tx.sitterService.createMany({
+        data: input.serviceTypes.map((serviceType) => ({ sitterProfileId, serviceType })),
+      });
+    }
+
+    if (input.serviceRegions) {
+      await tx.sitterServiceRegion.deleteMany({ where: { sitterProfileId } });
+      await tx.sitterServiceRegion.createMany({
+        data: input.serviceRegions.map((region) => ({ sitterProfileId, region })),
+      });
+    }
+
+    return tx.sitterProfile.findUnique({
+      where: { id: sitterProfileId },
+      select: SITTER_PROFILE_SELECT,
+    });
   });
 };

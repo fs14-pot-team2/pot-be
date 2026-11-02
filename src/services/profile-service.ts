@@ -1,9 +1,11 @@
 import AppError from "../errors/app-error.js";
 import {
   findOwnerProfileByUserId,
+  findSitterProfileByUserId,
   updateOwnerProfileByUserId,
+  updateSitterProfileByUserId,
 } from "../repositories/profile-repository.js";
-import type { UpdateOwnerProfileInput } from "../types/profile.js";
+import type { UpdateOwnerProfileInput, UpdateSitterProfileInput } from "../types/profile.js";
 
 type OwnerProfileRecord = NonNullable<Awaited<ReturnType<typeof findOwnerProfileByUserId>>>;
 
@@ -49,4 +51,39 @@ export async function updateOwnerProfile(userId: bigint, input: UpdateOwnerProfi
     }
     throw error;
   }
+}
+
+type SitterProfileRecord = NonNullable<Awaited<ReturnType<typeof findSitterProfileByUserId>>>;
+
+function toSitterProfileResponse(profile: SitterProfileRecord) {
+  return {
+    id: profile.id.toString(),
+    userId: profile.userId.toString(),
+    profileImageUrl: profile.profileImageUrl ?? null,
+    gender: profile.gender,
+    shortIntroduction: profile.shortIntroduction,
+    description: profile.description ?? null,
+    serviceTypes: profile.sitterServices.map((service) => service.serviceType),
+    serviceRegions: profile.sitterServiceRegions.map((item) => item.region),
+  };
+}
+
+export async function getSitterProfile(userId: bigint) {
+  const profile = await findSitterProfileByUserId(userId);
+
+  if (!profile) {
+    throw new AppError("PROFILE_NOT_FOUND");
+  }
+
+  return toSitterProfileResponse(profile);
+}
+
+export async function updateSitterProfile(userId: bigint, input: UpdateSitterProfileInput) {
+  const updated = await updateSitterProfileByUserId(userId, input);
+
+  if (!updated) {
+    throw new AppError("PROFILE_NOT_FOUND");
+  }
+
+  return toSitterProfileResponse(updated);
 }
