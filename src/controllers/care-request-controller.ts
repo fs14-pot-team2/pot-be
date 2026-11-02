@@ -3,11 +3,13 @@ import AppError from "../errors/app-error.js";
 import {
   createCareRequest,
   getActiveCareRequest,
+  getReceivedCareRequests,
   updateCareRequest,
 } from "../services/care-request-service.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 import {
   validateCreateCareRequest,
+  validateReceivedCareRequestsQuery,
   validateUpdateCareRequest,
 } from "../validators/care-request-validator.js";
 
@@ -112,4 +114,43 @@ export async function updateCareRequestController(req: Request, res: Response) {
   };
 
   res.status(200).json(serializeBigInt(careRequestResponse));
+}
+
+// 팟트너의 받은 돌봄 요청 목록 조회
+export async function getReceivedCareRequestsController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const sitterId = req.user.id;
+  const query = validateReceivedCareRequestsQuery(req.query);
+  const result = await getReceivedCareRequests(sitterId, query);
+
+  const items = result.items.map((item) => ({
+    careRequest: {
+      id: item.id,
+      createdAt: item.createdAt,
+      serviceType: item.serviceType,
+      startDate: item.startDate.toISOString().slice(0, 10),
+      endDate: item.endDate.toISOString().slice(0, 10),
+      sido: item.sido,
+      sigungu: item.sigungu,
+      bname: item.bname,
+      owner: {
+        nickname: item.owner.nickname,
+      },
+    },
+    designatedRequestId: item.designatedRequests[0]?.id ?? null,
+  }));
+
+  res.status(200).json(
+    serializeBigInt({
+      items,
+      availableRegions: result.availableRegions,
+      page: result.page,
+      pageSize: result.pageSize,
+      totalCount: result.totalCount,
+      totalPages: result.totalPages,
+    }),
+  );
 }

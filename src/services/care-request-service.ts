@@ -1,22 +1,30 @@
 import { prisma } from "../config/prisma.js";
 import type { Prisma } from "../generated/prisma/client.js";
+import { CareRequestStatus, type Region } from "../generated/prisma/enums.js";
 import AppError from "../errors/app-error.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
+  countReceivedCareRequests,
+  expireReceivedCareRequests,
   findCareRequestById,
   findOpenCareRequest,
   findQuoteByCareRequestId,
+  findReceivedCareRequests,
+  findReceivedDesignatedRequestRegions,
+  findSitterProfileWithRegions,
   insertCareRequest,
   lockCareRequestForUpdate,
   updateOpenCareRequest,
 } from "../repositories/care-request-repository.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
+import { getTodayInKst } from "../utils/kst-date.js";
 import { toRegion } from "../utils/region.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import {
   validateUpdatedCareDates,
   type CreateCareRequestInput,
   type UpdateCareRequestInput,
+  type ReceivedCareRequestsQuery,
 } from "../validators/care-request-validator.js";
 
 // 팟오너의 신규 돌봄 요청 생성
@@ -201,4 +209,84 @@ export async function updateCareRequest(
 
     throw error;
   }
+}
+
+// 팟트너의 받은 공개·지정 돌봄 요청 목록 조회
+export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedCareRequestsQuery) {
+  const sitterProfile = await findSitterProfileWithRegions(sitterId);
+
+  if (!sitterProfile) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  const sitterRegions = sitterProfile.sitterServiceRegions.map(({ region }) => region);
+  const today = new Date(`${getTodayInKst()}T00:00:00.000Z`);
+
+  await expireReceivedCareRequests(sitterId, sitterRegions, today);
+
+  const designatedRegions = await findReceivedDesignatedRequestRegions(sitterId, today);
+
+  const availableRegions: Region[] = [
+    ...new Set([...sitterRegions, ...designatedRegions.map(({ region }) => region)]),
+  ];
+
+  const where: Prisma.CareRequestWhereInput = {
+    status: CareRequestStatus.OPEN,
+    startDate: { gte: today },
+    quotes: {
+      none: { sitterId },
+    },
+    designatedRequests: {
+      none: {
+        sitterId,
+        rejectedRequest: { isNot: null },
+      },
+      ...(query.designatedOnly && {
+        some: { sitterId },
+      }),
+    },
+    OR: [
+      {
+        region: { in: sitterRegions },
+        ignoredRequests: { none: { sitterId } },
+      },
+      {
+        designatedRequests: { some: { sitterId } },
+      },
+    ],
+    ...(query.serviceTypes.length > 0 && {
+      serviceType: { in: query.serviceTypes },
+    }),
+    ...(query.region && { region: query.region }),
+    ...(query.keyword && {
+      owner: {
+        nickname: { contains: query.keyword },
+      },
+    }),
+  };
+
+  const orderBy: Prisma.CareRequestOrderByWithRelationInput[] =
+    query.sort === "START_DATE_ASC"
+      ? [{ startDate: "asc" }, { id: "desc" }]
+      : [{ createdAt: "desc" }, { id: "desc" }];
+
+  const skip = (query.page - 1) * query.pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const [totalCount, items] = await Promise.all([
+    countReceivedCareRequests(where),
+    findReceivedCareRequests(where, orderBy, skip, query.pageSize, sitterId),
+  ]);
+
+  return {
+    items,
+    availableRegions,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / query.pageSize),
+  };
 }

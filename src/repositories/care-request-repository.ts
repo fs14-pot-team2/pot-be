@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import { CareRequestStatus, type Region } from "../generated/prisma/enums.js";
 import type { DbClient } from "../types/db.js";
 import type {
@@ -107,5 +108,112 @@ export function updateOpenCareRequest(
         endDate: new Date(`${endDate}T00:00:00.000Z`),
       }),
     },
+  });
+}
+
+// 팟트너 프로필 등록 여부 및 서비스 가능 지역 확인
+export function findSitterProfileWithRegions(sitterId: bigint, db: DbClient = prisma) {
+  return db.sitterProfile.findUnique({
+    where: { userId: sitterId },
+    select: {
+      sitterServiceRegions: {
+        select: { region: true },
+      },
+    },
+  });
+}
+
+// 팟트너가 받을 수 있는 돌봄 요청 중 시작일이 지난 요청을 만료 처리
+export function expireReceivedCareRequests(
+  sitterId: bigint,
+  sitterRegions: Region[],
+  today: Date,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.updateMany({
+    where: {
+      status: CareRequestStatus.OPEN,
+      startDate: { lt: today },
+      OR: [
+        { region: { in: sitterRegions } },
+        {
+          designatedRequests: {
+            some: { sitterId },
+          },
+        },
+      ],
+    },
+    data: {
+      status: CareRequestStatus.EXPIRED,
+    },
+  });
+}
+
+// 팟트너가 받은 공개·지정 돌봄 요청 목록 조회
+export function findReceivedCareRequests(
+  where: Prisma.CareRequestWhereInput,
+  orderBy: Prisma.CareRequestOrderByWithRelationInput[],
+  skip: number,
+  take: number,
+  sitterId: bigint,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.findMany({
+    where,
+    orderBy,
+    skip,
+    take,
+    select: {
+      id: true,
+      createdAt: true,
+      serviceType: true,
+      startDate: true,
+      endDate: true,
+      sido: true,
+      sigungu: true,
+      bname: true,
+      owner: {
+        select: {
+          nickname: true,
+        },
+      },
+      designatedRequests: {
+        where: { sitterId },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+}
+
+// 검색·필터 조건에 따른 받은 돌봄 요청의 전체 건수 조회
+export function countReceivedCareRequests(
+  where: Prisma.CareRequestWhereInput,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.count({ where });
+}
+
+// 팟트너가 받은 지정 요청의 지역 목록 조회
+export function findReceivedDesignatedRequestRegions(
+  sitterId: bigint,
+  today: Date,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.findMany({
+    where: {
+      status: CareRequestStatus.OPEN,
+      startDate: { gte: today },
+      designatedRequests: {
+        some: { sitterId },
+        none: {
+          sitterId,
+          rejectedRequest: { isNot: null },
+        },
+      },
+      quotes: { none: { sitterId } },
+    },
+    select: { region: true },
+    distinct: ["region"],
   });
 }

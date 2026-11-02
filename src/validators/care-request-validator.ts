@@ -1,7 +1,8 @@
-import { ServiceType, type Region } from "../generated/prisma/enums.js";
+import { ServiceType, Region } from "../generated/prisma/enums.js";
 import AppError from "../errors/app-error.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 import { toRegion } from "../utils/region.js";
+import { validatePagination } from "./pagination-validator.js";
 
 export interface CreateCareRequestInput {
   serviceType: ServiceType;
@@ -205,5 +206,83 @@ export function validateCreateCareRequest(body: unknown): CreateCareRequestInput
     sigungu,
     bname,
     region,
+  };
+}
+
+export type ReceivedCareRequestsQuery = {
+  page: number;
+  pageSize: number;
+  serviceTypes: ServiceType[];
+  designatedOnly: boolean;
+  region?: Region;
+  keyword: string;
+  sort: "LATEST" | "START_DATE_ASC";
+};
+
+// 받은 돌봄 요청 목록의 검색·필터·정렬 입력값 검증
+export function validateReceivedCareRequestsQuery(
+  query: Record<string, unknown>,
+): ReceivedCareRequestsQuery {
+  const { page, pageSize } = validatePagination(query.page, query.pageSize);
+
+  let serviceTypes: ServiceType[] = [];
+
+  if (query.serviceTypes !== undefined) {
+    if (typeof query.serviceTypes !== "string") {
+      throw new AppError("INVALID_REQUEST");
+    }
+
+    const values = query.serviceTypes.split(",");
+
+    if (values.some((value) => !isServiceType(value))) {
+      throw new AppError("INVALID_SERVICE_TYPE");
+    }
+
+    serviceTypes = [...new Set(values)] as ServiceType[];
+  }
+
+  let designatedOnly = false;
+
+  if (query.designatedOnly !== undefined) {
+    if (query.designatedOnly !== "true" && query.designatedOnly !== "false") {
+      throw new AppError("INVALID_REQUEST");
+    }
+
+    designatedOnly = query.designatedOnly === "true";
+  }
+
+  let region: Region | undefined;
+
+  if (query.region !== undefined) {
+    if (
+      typeof query.region !== "string" ||
+      !Object.values(Region).some((value) => value === query.region)
+    ) {
+      throw new AppError("INVALID_REGION");
+    }
+
+    region = query.region as Region;
+  }
+
+  if (query.keyword !== undefined && typeof query.keyword !== "string") {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  const keyword = typeof query.keyword === "string" ? query.keyword.trim() : "";
+
+  const sort = query.sort ?? "LATEST";
+
+  if (sort !== "LATEST" && sort !== "START_DATE_ASC") {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  return {
+    page,
+    pageSize,
+    serviceTypes,
+    designatedOnly,
+    region,
+    keyword,
+    sort,
   };
 }
