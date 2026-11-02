@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
@@ -14,13 +15,25 @@ function futureDate(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-// Prisma UNIQUE 제약 위반 오류를 의도적으로 발생시키기 위한 테스트 함수
-function createP2002Error() {
+// Prisma P2002 UNIQUE 제약 충돌 오류 생성
+function createP2002Error(constraintName?: string) {
   return Object.assign(new Error("Unique constraint failed"), {
     code: "P2002",
+    ...(constraintName && {
+      meta: {
+        driverAdapterError: {
+          cause: {
+            constraint: {
+              index: constraintName,
+            },
+          },
+        },
+      },
+    }),
   });
 }
 
+// Prisma P2025 충돌 오류 생성
 function createP2025Error() {
   return Object.assign(new Error("Record not found"), {
     code: "P2025",
@@ -84,28 +97,61 @@ function createConflictTransaction(
   } as unknown as Prisma.TransactionClient;
 }
 
-// P2025 오류를 그대로 전달하는지 확인
+// 도메인 오류 코드와 HTTP 상태 코드 확인
+function assertAppError(code: string, statusCode = 409) {
+  return (error: unknown) =>
+    error instanceof AppError && error.code === code && error.statusCode === statusCode;
+}
+
+// Prisma P2002 원본 오류 전달 확인
+function assertP2002(error: unknown) {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "P2002" &&
+    !(error instanceof AppError)
+  );
+}
+
+// Prisma P2025 원본 오류 전달 확인
 function assertP2025(error: unknown) {
   return error instanceof Error && "code" in error && error.code === "P2025";
 }
 
 describe("돌봄 요청 생성", () => {
-  describe("동시 상태 변경 충돌 복구", () => {
-    // Prisma P2002 발생 시 중복 요청 에러로 변환하는지 확인
+  describe("UNIQUE 제약 충돌 처리", () => {
+    // P2002 대상 UNIQUE 제약 충돌 시 중복 요청 오류 변환 확인
     it("P2002 발생 시 활성 돌봄 요청 중복 에러를 반환한다", async () => {
       const runTransaction = async () => {
-        throw createP2002Error();
+        throw createP2002Error("CareRequest_one_open_per_owner_idx");
       };
 
       await assert.rejects(
         createCareRequest(1n, createRequestData(), runTransaction),
-        (error: unknown) =>
-          error instanceof AppError &&
-          error.code === "ACTIVE_CARE_REQUEST_ALREADY_EXISTS" &&
-          error.statusCode === 409,
+        assertAppError("ACTIVE_CARE_REQUEST_ALREADY_EXISTS"),
       );
     });
 
+    // P2002 다른 UNIQUE 제약 충돌 시 원본 Prisma 오류 유지 확인
+    it("P2002 발생 시 다른 UNIQUE 제약이면 원본 Prisma 오류를 전달한다", async () => {
+      const runTransaction = async () => {
+        throw createP2002Error("User_email_role_key");
+      };
+
+      await assert.rejects(createCareRequest(1n, createRequestData(), runTransaction), assertP2002);
+    });
+
+    // P2002 UNIQUE 제약 이름을 식별할 수 없으면 원본 Prisma 오류 유지 확인
+    it("P2002 발생 시 UNIQUE 제약 이름이 없으면 원본 Prisma 오류를 전달한다", async () => {
+      const runTransaction = async () => {
+        throw createP2002Error();
+      };
+
+      await assert.rejects(createCareRequest(1n, createRequestData(), runTransaction), assertP2002);
+    });
+  });
+
+  describe("동시 상태 변경 충돌 복구", () => {
     // P2025 이후 다른 활성 요청이 있으면 중복 에러를 반환하고 재시도하지 않는지 확인
     it("P2025 이후 다른 활성 요청이 있으면 중복 에러를 반환한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
@@ -142,10 +188,7 @@ describe("돌봄 요청 생성", () => {
 
       await assert.rejects(
         createCareRequest(ownerId, createRequestData(), runTransaction),
-        (error: unknown) =>
-          error instanceof AppError &&
-          error.code === "ACTIVE_CARE_REQUEST_ALREADY_EXISTS" &&
-          error.statusCode === 409,
+        assertAppError("ACTIVE_CARE_REQUEST_ALREADY_EXISTS"),
       );
 
       assert.equal(transactionCount, 1);
@@ -207,8 +250,8 @@ describe("돌봄 요청 생성", () => {
       assert.equal(openRequests[0].id, createdRequest.id);
     });
 
-    // P2025 이후 최초 요청이 여전히 OPEN이면 기존 오류를 유지하고 재시도하지 않는지 확인
-    it("P2025 이후 OPEN 상태면 기존 오류를 전달한다", async () => {
+    // P2025 이후 최초 요청이 여전히 OPEN이면 원본 Prisma 오류를 유지하고 재시도하지 않는지 확인
+    it("P2025 이후 OPEN 상태면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const initialRequest = await prisma.careRequest.findUniqueOrThrow({
@@ -238,8 +281,8 @@ describe("돌봄 요청 생성", () => {
       assert.equal(savedRequest.status, "OPEN");
     });
 
-    // P2025 이후 최초 요청이 삭제됐다면 기존 오류를 유지하고 재시도하지 않는지 확인
-    it("P2025 이후 요청이 없으면 기존 오류를 전달한다", async () => {
+    // P2025 이후 최초 요청이 삭제됐다면 원본 Prisma 오류를 유지하고 재시도하지 않는지 확인
+    it("P2025 이후 요청이 없으면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const initialRequest = await prisma.careRequest.findUniqueOrThrow({
@@ -274,8 +317,8 @@ describe("돌봄 요청 생성", () => {
       assert.equal(deletedRequest, null);
     });
 
-    // 최초 OPEN 요청 ID를 확보하지 못한 상태에서 P2025가 발생하면 그대로 전달하는지 확인
-    it("최초 요청 ID 없이 P2025 발생 시 기존 오류를 전달한다", async () => {
+    // 최초 OPEN 요청 ID를 확보하지 못한 상태에서 P2025가 발생하면 원본 Prisma 오류를 전달하는지 확인
+    it("최초 요청 ID 없이 P2025 발생 시 원본 Prisma 오류를 전달한다", async () => {
       let transactionCount = 0;
 
       const runTransaction = async () => {
@@ -288,8 +331,8 @@ describe("돌봄 요청 생성", () => {
       assert.equal(transactionCount, 1);
     });
 
-    // 재시도 트랜잭션에서도 P2025가 발생하면 추가 재시도 없이 기존 오류를 전달하는지 확인
-    it("재시도에서도 P2025 발생 시 기존 오류를 전달한다", async () => {
+    // 재시도 트랜잭션에서도 P2025가 발생하면 추가 재시도 없이 원본 Prisma 오류를 전달하는지 확인
+    it("재시도에서도 P2025 발생 시 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const initialRequest = await prisma.careRequest.findUniqueOrThrow({
@@ -353,15 +396,12 @@ describe("돌봄 요청 생성", () => {
           return callback(createConflictTransaction(initialRequest));
         }
 
-        throw createP2002Error();
+        throw createP2002Error("CareRequest_one_open_per_owner_idx");
       };
 
       await assert.rejects(
         createCareRequest(ownerId, createRequestData(), runTransaction),
-        (error: unknown) =>
-          error instanceof AppError &&
-          error.code === "ACTIVE_CARE_REQUEST_ALREADY_EXISTS" &&
-          error.statusCode === 409,
+        assertAppError("ACTIVE_CARE_REQUEST_ALREADY_EXISTS"),
       );
 
       assert.equal(transactionCount, 2);
