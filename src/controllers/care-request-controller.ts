@@ -7,6 +7,7 @@ import {
   updateCareRequest,
 } from "../services/care-request-service.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
+import { serializeDate } from "../utils/serialize-date.js";
 import {
   validateCreateCareRequest,
   validateReceivedCareRequestsQuery,
@@ -27,8 +28,8 @@ export async function createCareRequestController(req: Request, res: Response) {
   const careRequestResponse = {
     id: createdCareRequest.id,
     serviceType: createdCareRequest.serviceType,
-    startDate: createdCareRequest.startDate.toISOString().slice(0, 10),
-    endDate: createdCareRequest.endDate.toISOString().slice(0, 10),
+    startDate: serializeDate(createdCareRequest.startDate),
+    endDate: serializeDate(createdCareRequest.endDate),
     zonecode: createdCareRequest.zonecode,
     address: createdCareRequest.address,
     detailAddress: createdCareRequest.detailAddress,
@@ -63,8 +64,8 @@ export async function getActiveCareRequestController(req: Request, res: Response
   const careRequestResponse = {
     id: activeCareRequest.id,
     serviceType: activeCareRequest.serviceType,
-    startDate: activeCareRequest.startDate.toISOString().slice(0, 10),
-    endDate: activeCareRequest.endDate.toISOString().slice(0, 10),
+    startDate: serializeDate(activeCareRequest.startDate),
+    endDate: serializeDate(activeCareRequest.endDate),
     zonecode: activeCareRequest.zonecode,
     address: activeCareRequest.address,
     detailAddress: activeCareRequest.detailAddress,
@@ -100,8 +101,8 @@ export async function updateCareRequestController(req: Request, res: Response) {
   const careRequestResponse = {
     id: updatedCareRequest.id,
     serviceType: updatedCareRequest.serviceType,
-    startDate: updatedCareRequest.startDate.toISOString().slice(0, 10),
-    endDate: updatedCareRequest.endDate.toISOString().slice(0, 10),
+    startDate: serializeDate(updatedCareRequest.startDate),
+    endDate: serializeDate(updatedCareRequest.endDate),
     zonecode: updatedCareRequest.zonecode,
     address: updatedCareRequest.address,
     detailAddress: updatedCareRequest.detailAddress,
@@ -131,8 +132,8 @@ export async function getReceivedCareRequestsController(req: Request, res: Respo
       id: item.id,
       createdAt: item.createdAt,
       serviceType: item.serviceType,
-      startDate: item.startDate.toISOString().slice(0, 10),
-      endDate: item.endDate.toISOString().slice(0, 10),
+      startDate: serializeDate(item.startDate),
+      endDate: serializeDate(item.endDate),
       sido: item.sido,
       sigungu: item.sigungu,
       bname: item.bname,

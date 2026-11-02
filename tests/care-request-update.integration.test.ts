@@ -11,6 +11,7 @@ import {
 } from "../src/repositories/care-request-repository.js";
 import { updateCareRequest } from "../src/services/care-request-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
+import { serializeDate } from "../src/utils/serialize-date.js";
 
 // 테스트에 사용할 KST 기준 날짜
 function futureDate(days: number) {
@@ -157,7 +158,7 @@ describe("돌봄 요청 수정", () => {
         where: { id: careRequestId },
       });
 
-      assert.equal(savedRequest.endDate.toISOString().slice(0, 10), futureDate(14));
+      assert.equal(serializeDate(savedRequest.endDate), futureDate(14));
       assert.equal(savedRequest.detailAddress, "기존 상세 주소");
     });
 

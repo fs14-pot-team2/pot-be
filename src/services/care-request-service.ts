@@ -18,6 +18,7 @@ import {
 } from "../repositories/care-request-repository.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getTodayInKst } from "../utils/kst-date.js";
+import { serializeDate } from "../utils/serialize-date.js";
 import { toRegion } from "../utils/region.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import {
@@ -169,10 +170,9 @@ export async function updateCareRequest(
 
       if (careRequestData.startDate !== undefined || careRequestData.endDate !== undefined) {
         // 날짜가 전달된 경우에만 유효성 검증
-        const startDate =
-          careRequestData.startDate ?? targetRequest.startDate.toISOString().slice(0, 10);
+        const startDate = careRequestData.startDate ?? serializeDate(targetRequest.startDate);
 
-        const endDate = careRequestData.endDate ?? targetRequest.endDate.toISOString().slice(0, 10);
+        const endDate = careRequestData.endDate ?? serializeDate(targetRequest.endDate);
 
         validateUpdatedCareDates(startDate, endDate, careRequestData.startDate !== undefined);
       }
