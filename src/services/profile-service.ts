@@ -1,4 +1,5 @@
 import AppError from "../errors/app-error.js";
+import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import {
   createSitterProfileByUserId,
   findOwnerProfileByUserId,
@@ -93,12 +94,6 @@ export async function updateSitterProfile(userId: bigint, input: UpdateSitterPro
   return toSitterProfileResponse(updated);
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002"
-  );
-}
-
 export async function createSitterProfile(userId: bigint, input: CreateSitterProfileInput) {
   if (await findSitterProfileByUserId(userId)) {
     throw new AppError("SITTER_PROFILE_ALREADY_EXISTS");
@@ -109,9 +104,15 @@ export async function createSitterProfile(userId: bigint, input: CreateSitterPro
     return toSitterProfileResponse(created);
   } catch (error) {
     // 사전 조회 이후 동시에 생성된 경우(userId UNIQUE 충돌)만 비즈니스 에러로 변환
-    if (isUniqueViolation(error)) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "P2002" &&
+      getUniqueConstraintName(error) === "SitterProfile_userId_key"
+    ) {
       throw new AppError("SITTER_PROFILE_ALREADY_EXISTS");
     }
+
     throw error;
   }
 }
