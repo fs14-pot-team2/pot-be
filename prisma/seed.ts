@@ -9,6 +9,7 @@ import {
   Region,
   ServiceType,
 } from "../src/generated/prisma/client.js";
+import { assertAllowedSeedTarget } from "../src/config/seed-target.js";
 import { hashPassword } from "../src/utils/password.js";
 
 type SeedUser = {
@@ -109,22 +110,19 @@ type SeedData = {
   conversations: SeedConversation[];
 };
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error("DATABASE_URL이 설정되지 않았습니다.");
-}
-
-const databaseUrl = new URL(connectionString);
-
-if (!["localhost", "127.0.0.1"].includes(databaseUrl.hostname) || databaseUrl.pathname !== "/pot") {
-  throw new Error("시딩은 로컬 pot 데이터베이스에서만 실행할 수 있습니다.");
-}
+const connectionString = process.env.DATABASE_URL ?? "";
+const seedTarget = assertAllowedSeedTarget({
+  databaseUrl: connectionString,
+  potDevRdsHost: process.env.POT_DEV_RDS_HOST,
+  potDevSeedConfirmation: process.env.POT_DEV_SEED_CONFIRMATION,
+});
 
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  console.log(`시딩 대상 확인: ${seedTarget.kind === "local" ? "로컬 pot" : "개발 RDS pot_dev"}`);
+
   const json = await readFile(new URL("./data/pot-seed.json", import.meta.url), "utf8");
   const data = JSON.parse(json) as SeedData;
 
