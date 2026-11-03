@@ -24,12 +24,6 @@ export async function ignoreCareRequest(
   careRequestId: bigint,
   runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
-  const initialProfile = await findSitterProfileWithRegions(sitterId);
-
-  if (!initialProfile) {
-    throw new AppError("FORBIDDEN");
-  }
-
   try {
     const ignoredRequest = await runTransaction(async (tx) => {
       // 서비스 지역은 공개 요청 수신 자격을 결정하므로, 지역 변경과 숨김 처리의 순차적 실행을 보장하기 위해 동일한 프로필 행을 잠금
@@ -56,10 +50,6 @@ export async function ignoreCareRequest(
         throw new AppError("CARE_REQUEST_NOT_FOUND");
       }
 
-      if (!sitterRegions.includes(careRequest.region)) {
-        throw new AppError("FORBIDDEN");
-      }
-
       if (careRequest.status !== CareRequestStatus.OPEN) {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
       }
@@ -78,6 +68,10 @@ export async function ignoreCareRequest(
 
       if (designatedRequest) {
         throw new AppError("REQUEST_IGNORE_NOT_ALLOWED");
+      }
+
+      if (!sitterRegions.includes(careRequest.region)) {
+        throw new AppError("FORBIDDEN");
       }
 
       const existingIgnoredRequest = await findIgnoredRequestByCareRequestAndSitter(
