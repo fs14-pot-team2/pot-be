@@ -5,7 +5,10 @@ import {
   getReceivedCareRequestsController,
   updateCareRequestController,
 } from "../controllers/care-request-controller.js";
-import { createDesignatedRequestController } from "../controllers/designated-request-controller.js";
+import {
+  createDesignatedRequestController,
+  rejectDesignatedRequestController,
+} from "../controllers/designated-request-controller.js";
 import { ignoreCareRequestController } from "../controllers/ignored-request-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
@@ -36,6 +39,14 @@ careRequestRouter.post(
   authenticate,
   authorize("OWNER"),
   createDesignatedRequestController,
+);
+
+// 팟트너의 지정 요청 반려
+careRequestRouter.post(
+  "/designated-requests/:designatedRequestId/reject",
+  authenticate,
+  authorize("SITTER"),
+  rejectDesignatedRequestController,
 );
 
 // 팟트너의 받은 돌봄 요청 목록 조회
