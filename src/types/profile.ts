@@ -6,6 +6,15 @@ export interface UpdateOwnerProfileInput {
   livingRegion?: Region | null;
 }
 
+export interface CreateSitterProfileInput {
+  profileImageUrl: string | null;
+  description: string | null;
+  gender: Gender;
+  shortIntroduction: string;
+  serviceTypes: ServiceType[];
+  serviceRegions: Region[];
+}
+
 export interface UpdateSitterProfileInput {
   profileImageUrl?: string | null;
   description?: string | null;

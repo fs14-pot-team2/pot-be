@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  createSitterProfileController,
   getOwnerProfileController,
   getSitterProfileController,
   updateOwnerProfileController,
@@ -23,6 +24,14 @@ profileRouter.patch(
   authenticate,
   authorize("OWNER"),
   updateOwnerProfileController,
+);
+
+// 프로필 등록 - 팟트너
+profileRouter.post(
+  "/sitters/me/profile",
+  authenticate,
+  authorize("SITTER"),
+  createSitterProfileController,
 );
 
 // 프로필 조회 - 팟트너
