@@ -50,12 +50,45 @@ npx prisma db seed
 
 ### 개발 RDS의 `pot_dev` 시딩
 
-개발 RDS에서는 `DATABASE_URL`이 `pot_dev`를 가리키는 것만으로 실행되지 않는다. 다음 환경 변수를 모두 설정해야 한다.
+개발 RDS에서는 `DATABASE_URL`이 `pot_dev`를 가리키는 것만으로 실행되지 않는다. `POT_DEV_RDS_HOST`와 `POT_DEV_SEED_CONFIRMATION`을 시딩 프로세스에 함께 전달해야 한다. 아래의 `개발-RDS-엔드포인트`는 실제 개발 RDS 엔드포인트로 바꾼다.
+
+#### macOS / Linux (bash, zsh)
+
+다음 방식은 두 환경 변수를 시딩 명령에만 전달하므로 실행 후 현재 셸에 남지 않는다.
 
 ```bash
-POT_DEV_RDS_HOST=<개발 RDS 엔드포인트>
-POT_DEV_SEED_CONFIRMATION=pot_dev
+POT_DEV_RDS_HOST="개발-RDS-엔드포인트" \
+POT_DEV_SEED_CONFIRMATION="pot_dev" \
+npx prisma db seed
 ```
+
+#### Windows PowerShell
+
+시딩의 성공 여부와 관계없이 승인 값이 남지 않도록 `finally`에서 두 환경 변수를 제거한다.
+
+```powershell
+$env:POT_DEV_RDS_HOST = "개발-RDS-엔드포인트"
+$env:POT_DEV_SEED_CONFIRMATION = "pot_dev"
+
+try {
+  npx prisma db seed
+} finally {
+  Remove-Item Env:POT_DEV_RDS_HOST -ErrorAction SilentlyContinue
+  Remove-Item Env:POT_DEV_SEED_CONFIRMATION -ErrorAction SilentlyContinue
+}
+```
+
+#### Windows CMD
+
+```bat
+set "POT_DEV_RDS_HOST=개발-RDS-엔드포인트"
+set "POT_DEV_SEED_CONFIRMATION=pot_dev"
+npx prisma db seed
+set "POT_DEV_RDS_HOST="
+set "POT_DEV_SEED_CONFIRMATION="
+```
+
+CMD에서 시딩을 중간에 강제로 종료했다면 현재 터미널을 닫거나 위의 마지막 두 명령을 직접 실행해 환경 변수를 제거한다.
 
 - `DATABASE_URL`의 데이터베이스 이름은 정확히 `pot_dev`여야 한다.
 - 접속 호스트는 AWS RDS 도메인이어야 하며 `POT_DEV_RDS_HOST`와 정확히 일치해야 한다.
