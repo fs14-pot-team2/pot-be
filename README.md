@@ -7,7 +7,7 @@ POT (Plant On Trust)은 식물 돌봄이 필요한 팟오너와 방문 돌봄을
 - Node.js 24, Express 5, TypeScript
 - PostgreSQL 17, Prisma 7
 - ESLint, Prettier, Husky, GitHub Actions
-- 배포: AWS Elastic Beanstalk (`main` push 시 배포 작업 실행)
+- 배포: AWS Elastic Beanstalk (`develop` push 시 개발 환경 배포 작업 실행)
 
 ## HTTPS 운영 설정
 
@@ -75,7 +75,7 @@ DB를 처음 실행하기 전에 `.env.example`을 복사한 `.env` 파일에서
 2. 작업을 시작할 때 Issue를 **In Progress**로 옮기고 `develop`에서 작업 브랜치를 만듭니다. 예: `feat/care-request-api`.
 3. 작업이 끝나면 `develop`을 대상으로 PR을 만들고, PR 오른쪽 **Development**에서 해당 Issue를 연결합니다. PR 제목과 커밋은 `feat: 돌봄 요청 API 구현`처럼 팀의 형식을 사용합니다.
 4. 리뷰와 CI 확인 후 PR을 `develop`에 머지합니다. 현재 기본 브랜치는 `develop`입니다. 같은 저장소의 Issue를 자동 종료하려면 PR 본문에 `Closes #번호`를 적거나 PR의 **Development**에서 Issue를 연결합니다. 프로젝트에서 Issue 종료 시 **Done**으로 이동하는 워크플로가 켜져 있어야 상태도 함께 바뀝니다.
-5. 배포할 변경사항은 팀 일정에 맞춰 `develop`에서 `main`으로 별도 PR을 만듭니다. `main` push 후 GitHub Actions가 Elastic Beanstalk 배포를 실행합니다.
+5. 개발 기간에는 `develop` push 후 GitHub Actions가 품질 검사와 DB 통합 검사를 통과한 코드를 Elastic Beanstalk 개발 환경에 배포합니다. 운영 전환 시에는 배포 대상을 `main`으로 되돌리고 운영 DB 마이그레이션과 환경변수 전환 절차를 별도로 진행합니다.
 
 ## 코드 규칙과 검사
 
@@ -97,7 +97,22 @@ npm run test:unit
 
 `npm ci`로 설치하면 Husky가 설정되어 커밋 전에 변경 파일 검사와 커밋 메시지 검사가 실행됩니다. GitHub Actions도 `main`·`develop` 대상 PR과 해당 브랜치의 push에서 품질 검사를 수행합니다. 검사에서 실패하면 로그를 확인하고 수정한 뒤 다시 push하세요.
 
-DB 통합 테스트는 GitHub Actions가 작업마다 생성하는 임시 PostgreSQL에 마이그레이션을 적용한 뒤 실행합니다. 테스트 데이터는 각 테스트가 직접 준비하며 시딩 데이터, 개인 로컬 DB, 운영 RDS를 사용하지 않습니다. 임시 DB는 외부 포트를 열지 않고 작업이 끝나면 함께 삭제됩니다. `main` 배포는 품질 검사와 DB 통합 검사가 모두 성공해야 실행됩니다.
+DB 통합 테스트는 GitHub Actions가 작업마다 생성하는 임시 PostgreSQL에 마이그레이션을 적용한 뒤 실행합니다. 테스트 데이터는 각 테스트가 직접 준비하며 시딩 데이터, 개인 로컬 DB, 운영 RDS를 사용하지 않습니다. 임시 DB는 외부 포트를 열지 않고 작업이 끝나면 함께 삭제됩니다. `develop` 배포는 품질 검사와 DB 통합 검사가 모두 성공해야 실행됩니다. 이 통합 테스트의 마이그레이션은 임시 DB에만 적용되므로, Prisma 마이그레이션이 추가된 PR은 개발 RDS의 `pot_dev`에도 별도 적용해야 합니다.
+
+### Prisma 마이그레이션 포함 PR 머지 절차
+
+`prisma/migrations/`에 새 마이그레이션이 포함된 PR은 코드가 먼저 자동 배포되지 않도록 다음 순서로 진행합니다.
+
+1. 로컬 DB에서 `prisma migrate dev`로 마이그레이션 파일을 생성하고 PR에 포함합니다.
+2. PR의 코드 리뷰와 품질 검사, DB 통합 테스트가 모두 성공했는지 확인합니다. 이 단계에서는 아래의 개발 RDS 수동 적용을 먼저 진행하기 위해 PR 머지만 잠시 대기합니다.
+3. 최종 승인된 PR 브랜치를 EC2의 마이그레이션 작업 디렉터리에서 받은 뒤, 개발 RDS의 `pot_dev`를 대상으로 `npx prisma migrate status`를 실행합니다.
+4. 접속 대상이 `pot_dev`임을 확인하고 `npx prisma migrate deploy`를 실행합니다. 접속 정보와 RDS CA 설정은 [개발용 더미 데이터 시딩 안내](prisma/README.md)의 개발 RDS 연결 주의사항을 따릅니다.
+5. 다시 `npx prisma migrate status`를 실행해 스키마가 최신 상태인지 확인합니다. 실패했다면 PR을 머지하거나 애플리케이션을 배포하지 않습니다.
+6. 마이그레이션 적용이 성공한 경우에만 PR을 `develop`에 머지합니다. 이후 GitHub Actions 검사를 통과하면 최신 애플리케이션이 자동 배포됩니다.
+
+수동 적용이 끝나면 기능 코드, 마이그레이션 파일, 테스트 파일을 포함한 PR 전체를 `develop`에 머지합니다. 기존 테스트 파일을 삭제하거나 별도 브랜치에서 관리하지 않습니다.
+
+개발 RDS에서는 `prisma migrate reset`, `prisma db push`, 운영용이 아닌 시딩을 실행하지 않습니다. 컬럼 삭제나 타입 변경처럼 기존 코드와 호환되지 않는 마이그레이션은 위 절차로 바로 적용하지 말고 배포 중단 시간과 데이터 보존 방법을 팀에서 먼저 합의합니다.
 
 ## 도움과 관련 저장소
 

@@ -52,6 +52,21 @@ npx prisma db seed
 
 개발 RDS에서는 `DATABASE_URL`이 `pot_dev`를 가리키는 것만으로 실행되지 않는다. `POT_DEV_RDS_HOST`와 `POT_DEV_SEED_CONFIRMATION`을 시딩 프로세스에 함께 전달해야 한다. 아래의 `개발-RDS-엔드포인트`는 실제 개발 RDS 엔드포인트로 바꾼다.
 
+개발 RDS에는 TLS로 연결하고 AWS RDS CA 인증서로 서버 인증서와 호스트 이름을 검증한다. EC2에서는 서울 리전 인증서 번들을 사용자 홈에 내려받을 수 있다.
+
+```bash
+curl -fsSLo "$HOME/rds-ap-northeast-2-bundle.pem" \
+  "https://truststore.pki.rds.amazonaws.com/ap-northeast-2/ap-northeast-2-bundle.pem"
+```
+
+`DATABASE_URL`에는 인증서의 절대 경로와 `verify-full`을 사용한다. 실제 사용자명, 비밀번호, 호스트는 문서나 Git에 기록하지 않는다.
+
+```dotenv
+DATABASE_URL="postgresql://사용자:비밀번호@개발-RDS-엔드포인트:5432/pot_dev?schema=public&sslmode=verify-full&sslrootcert=/인증서의/절대/경로/rds-ap-northeast-2-bundle.pem"
+```
+
+인증서 검증 오류를 `NODE_TLS_REJECT_UNAUTHORIZED=0`, `rejectUnauthorized=false` 또는 검증을 생략하는 SSL 설정으로 우회하지 않는다.
+
 #### macOS / Linux (bash, zsh)
 
 다음 방식은 두 환경 변수를 시딩 명령에만 전달하므로 실행 후 현재 셸에 남지 않는다.
