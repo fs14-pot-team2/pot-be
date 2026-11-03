@@ -5,6 +5,7 @@ import { CareRequestStatus } from "../generated/prisma/enums.js";
 import { expireCareRequest } from "../repositories/care-request-repository.js";
 import type { DbClient } from "../types/db.js";
 import { getTodayInKst } from "../utils/kst-date.js";
+import { serializeDate } from "../utils/serialize-date.js";
 
 interface CareRequestForExpiration {
   id: bigint;
@@ -20,7 +21,7 @@ export async function expireCareRequestIfPast(
     return false;
   }
 
-  const startDate = careRequest.startDate.toISOString().slice(0, 10);
+  const startDate = serializeDate(careRequest.startDate);
 
   if (startDate >= getTodayInKst()) {
     return false;
