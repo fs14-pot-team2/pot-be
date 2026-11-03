@@ -15,6 +15,31 @@ function parseAuthUser(payload: jwt.JwtPayload): AuthUser | null {
   return { id, role };
 }
 
+function verifyAccessToken(token: string): AuthUser {
+  try {
+    const decoded = jwt.verify(token, env.jwtAccessSecret, {
+      algorithms: ["HS256"],
+    });
+
+    const user = typeof decoded === "string" ? null : parseAuthUser(decoded);
+    if (!user) {
+      throw new AppError("UNAUTHORIZED");
+    }
+    return user;
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new AppError("TOKEN_EXPIRED");
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      throw new AppError("UNAUTHORIZED");
+    }
+    throw error;
+  }
+}
+
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
@@ -24,25 +49,27 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
   const token = header.slice("Bearer ".length).trim();
 
   try {
-    const decoded = jwt.verify(token, env.jwtAccessSecret, {
-      algorithms: ["HS256"],
-    });
-
-    const user = typeof decoded === "string" ? null : parseAuthUser(decoded);
-    if (!user) {
-      return next(new AppError("UNAUTHORIZED"));
-    }
-
-    req.user = user;
+    req.user = verifyAccessToken(token);
     next();
   } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      return next(new AppError("TOKEN_EXPIRED"));
-    }
-    if (error instanceof jwt.JsonWebTokenError) {
-      return next(new AppError("UNAUTHORIZED"));
-    }
-    return next(error);
+    next(error);
+  }
+}
+
+export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (!header) {
+    return next();
+  }
+  if (!header.startsWith("Bearer ")) {
+    return next(new AppError("UNAUTHORIZED"));
+  }
+
+  try {
+    req.user = verifyAccessToken(header.slice("Bearer ".length).trim());
+    next();
+  } catch (error) {
+    next(error);
   }
 }
 
