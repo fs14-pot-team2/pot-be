@@ -259,7 +259,7 @@ describe("지정 요청 생성", () => {
 
   describe("UNIQUE 제약 충돌 처리", () => {
     // P2002 지정 요청 복합 UNIQUE 제약 충돌 시 중복 지정 도메인 오류 변환 확인
-    it("P2002 지정 요청 복합 UNIQUE 충돌은 중복 지정 오류로 변환한다", async () => {
+    it("P2002 발생 시 중복 지정 오류를 반환한다", async () => {
       const { ownerId, careRequestId, sitterIds } = await createTestRequest();
       const runTransaction = async () => {
         throw createP2002Error("DesignatedRequest_careRequestId_sitterId_key");
@@ -274,7 +274,7 @@ describe("지정 요청 생성", () => {
     });
 
     // P2002 다른 UNIQUE 제약 충돌 시 원본 Prisma 오류 유지 확인
-    it("P2002 다른 UNIQUE 제약 충돌은 원본 Prisma 오류를 전달한다", async () => {
+    it("P2002 발생 시 다른 UNIQUE 제약이면 원본 Prisma 오류를 전달한다", async () => {
       const { ownerId, careRequestId, sitterIds } = await createTestRequest();
       const runTransaction = async () => {
         throw createP2002Error("User_email_role_key");
@@ -292,7 +292,7 @@ describe("지정 요청 생성", () => {
   describe("동시 상태 변경 충돌 복구", () => {
     // P2025 이후 최초 요청 상태가 변경됐다면 활성 요청 없음 도메인 오류로 변환
     for (const status of ["EXPIRED", "MATCHED", "CANCELED"] as const) {
-      it(`P2025 이후 최초 요청이 ${status} 상태면 지정 요청을 차단한다`, async () => {
+      it(`P2025 이후 최초 요청이 ${status} 상태면 지정 불가 오류를 반환한다`, async () => {
         const { ownerId, careRequestId, sitterIds } = await createTestRequest();
         const sitterId = sitterIds[0];
 
