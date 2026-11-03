@@ -1,6 +1,10 @@
 import AppError from "../errors/app-error.js";
 import { Gender, Region, ServiceType } from "../generated/prisma/enums.js";
-import type { UpdateOwnerProfileInput, UpdateSitterProfileInput } from "../types/profile.js";
+import type {
+  UpdateOwnerProfileInput,
+  CreateSitterProfileInput,
+  UpdateSitterProfileInput,
+} from "../types/profile.js";
 
 const MAX_SERVICE_TYPES = 2;
 const MAX_PROFILE_IMAGE_URL_LENGTH = 2048;
@@ -167,4 +171,23 @@ export function validateUpdateSitterProfile(body: unknown): UpdateSitterProfileI
   }
 
   return input;
+}
+
+export function validateCreateSitterProfile(body: unknown): CreateSitterProfileInput {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  // 필수 4개(성별, 한 줄 소개, 서비스 유형, 서비스 지역)는 없으면 각 필드의 에러 코드로 처리
+  const data = body as Record<string, unknown>;
+
+  return {
+    profileImageUrl:
+      "profileImageUrl" in data ? validateProfileImageUrl(data.profileImageUrl) : null,
+    description: "description" in data ? validateDescription(data.description) : null,
+    gender: validateGender(data.gender),
+    shortIntroduction: validateShortIntroduction(data.shortIntroduction),
+    serviceTypes: validateSitterServiceTypes(data.serviceTypes),
+    serviceRegions: validateServiceRegions(data.serviceRegions),
+  };
 }

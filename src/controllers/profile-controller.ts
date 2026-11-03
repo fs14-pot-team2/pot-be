@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import * as profileService from "../services/profile-service.js";
 import {
   validateUpdateOwnerProfile,
+  validateCreateSitterProfile,
   validateUpdateSitterProfile,
 } from "../validators/profile-validator.js";
 
@@ -46,6 +47,20 @@ export async function updateSitterProfileController(
     const input = validateUpdateSitterProfile(req.body);
     const profile = await profileService.updateSitterProfile(req.user!.id, input);
     res.status(200).json(profile);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createSitterProfileController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const input = validateCreateSitterProfile(req.body);
+    const profile = await profileService.createSitterProfile(req.user!.id, input);
+    res.status(201).json(profile);
   } catch (error) {
     next(error);
   }
