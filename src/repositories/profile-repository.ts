@@ -1,5 +1,9 @@
 import { prisma } from "../config/prisma.js";
-import type { UpdateOwnerProfileInput, UpdateSitterProfileInput } from "../types/profile.js";
+import type {
+  UpdateOwnerProfileInput,
+  CreateSitterProfileInput,
+  UpdateSitterProfileInput,
+} from "../types/profile.js";
 
 const OWNER_PROFILE_SELECT = {
   id: true,
@@ -36,6 +40,26 @@ const SITTER_PROFILE_SELECT = {
   sitterServices: { select: { serviceType: true }, orderBy: { id: "asc" } },
   sitterServiceRegions: { select: { region: true }, orderBy: { id: "asc" } },
 } as const;
+
+// 팟트너 프로필 등록 (서비스 유형·지역 함께 생성)
+export const createSitterProfileByUserId = (userId: bigint, input: CreateSitterProfileInput) => {
+  return prisma.sitterProfile.create({
+    data: {
+      userId,
+      profileImageUrl: input.profileImageUrl,
+      description: input.description,
+      gender: input.gender,
+      shortIntroduction: input.shortIntroduction,
+      sitterServices: {
+        create: input.serviceTypes.map((serviceType) => ({ serviceType })),
+      },
+      sitterServiceRegions: {
+        create: input.serviceRegions.map((region) => ({ region })),
+      },
+    },
+    select: SITTER_PROFILE_SELECT,
+  });
+};
 
 // 팟트너 프로필 조회 (서비스 유형·지역 포함)
 export const findSitterProfileByUserId = (userId: bigint) => {
