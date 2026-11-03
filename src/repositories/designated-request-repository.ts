@@ -104,3 +104,52 @@ export function insertRejectedRequest(
     },
   });
 }
+
+// 팟트너의 반려 요청 목록 조회
+export function findRejectedRequestsBySitter(
+  sitterId: bigint,
+  skip: number,
+  take: number,
+  db: DbClient = prisma,
+) {
+  return db.rejectedRequest.findMany({
+    where: {
+      designatedRequest: { sitterId },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip,
+    take,
+    select: {
+      id: true,
+      createdAt: true,
+      designatedRequest: {
+        select: {
+          id: true,
+          careRequest: {
+            select: {
+              id: true,
+              serviceType: true,
+              startDate: true,
+              endDate: true,
+              sido: true,
+              sigungu: true,
+              bname: true,
+              owner: {
+                select: { nickname: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+// 팟트너의 반려 요청 이력 전체 건수 조회
+export function countRejectedRequestsBySitter(sitterId: bigint, db: DbClient = prisma) {
+  return db.rejectedRequest.count({
+    where: {
+      designatedRequest: { sitterId },
+    },
+  });
+}

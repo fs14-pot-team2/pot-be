@@ -4,15 +4,18 @@ import { CareRequestStatus } from "../generated/prisma/enums.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
   findCareRequestById,
+  findSitterProfileIdByUserId,
   findSitterProfileWithRegions,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
 import {
   countDesignatedRequestsByCareRequest,
+  countRejectedRequestsBySitter,
   findDesignatedRequestByCareRequestAndSitter,
   findDesignatedRequestById,
   findQuoteByCareRequestAndSitter,
   findRejectedRequestByDesignatedRequestId,
+  findRejectedRequestsBySitter,
   findSitterByIdAndRole,
   insertDesignatedRequest,
   insertRejectedRequest,
@@ -207,4 +210,36 @@ export async function rejectDesignatedRequest(
 
     throw error;
   }
+}
+
+// 팟트너의 반려 요청 이력 목록 조회
+export async function getRejectedRequestsBySitter(
+  sitterId: bigint,
+  page: number,
+  pageSize: number,
+) {
+  const sitterProfile = await findSitterProfileIdByUserId(sitterId);
+
+  if (!sitterProfile) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  const skip = (page - 1) * pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const [totalCount, items] = await Promise.all([
+    countRejectedRequestsBySitter(sitterId),
+    findRejectedRequestsBySitter(sitterId, skip, pageSize),
+  ]);
+
+  return {
+    items,
+    page,
+    pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
 }

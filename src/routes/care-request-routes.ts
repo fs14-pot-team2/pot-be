@@ -7,6 +7,7 @@ import {
 } from "../controllers/care-request-controller.js";
 import {
   createDesignatedRequestController,
+  getRejectedRequestsBySitterController,
   rejectDesignatedRequestController,
 } from "../controllers/designated-request-controller.js";
 import { ignoreCareRequestController } from "../controllers/ignored-request-controller.js";
@@ -63,4 +64,12 @@ careRequestRouter.post(
   authenticate,
   authorize("SITTER"),
   ignoreCareRequestController,
+);
+
+// 팟트너의 반려 요청 이력 목록 조회
+careRequestRouter.get(
+  "/me/rejected",
+  authenticate,
+  authorize("SITTER"),
+  getRejectedRequestsBySitterController,
 );
