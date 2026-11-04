@@ -2,7 +2,7 @@ import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
-  findCareRequestById,
+  findCareRequest,
   findSitterProfileIdByUserId,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
@@ -10,8 +10,9 @@ import {
   countDesignatedRequestsByCareRequest,
   countRejectedRequestsBySitter,
   findDesignatedRequestByCareRequestAndSitter,
-  findDesignatedRequestById,
+  findDesignatedRequest,
   findQuoteByCareRequestAndSitter,
+  findRejectedRequest,
   findRejectedRequestByDesignatedRequestId,
   findRejectedRequestsBySitter,
   findSitterByIdAndRole,
@@ -28,7 +29,7 @@ export async function createDesignatedRequest(
   sitterId: bigint,
   runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
-  const initialRequest = await findCareRequestById(careRequestId);
+  const initialRequest = await findCareRequest(careRequestId);
 
   if (!initialRequest) {
     throw new AppError("CARE_REQUEST_NOT_FOUND");
@@ -42,7 +43,7 @@ export async function createDesignatedRequest(
     const createdDesignatedRequest = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
-      const targetRequest = await findCareRequestById(careRequestId, tx);
+      const targetRequest = await findCareRequest(careRequestId, tx);
 
       if (!targetRequest || targetRequest.status !== "OPEN") {
         throw new AppError("ACTIVE_CARE_REQUEST_NOT_FOUND");
@@ -102,7 +103,7 @@ export async function createDesignatedRequest(
       }
 
       if (error.code === "P2025") {
-        const refreshedRequest = await findCareRequestById(careRequestId);
+        const refreshedRequest = await findCareRequest(careRequestId);
 
         if (refreshedRequest && refreshedRequest.status !== "OPEN") {
           throw new AppError("ACTIVE_CARE_REQUEST_NOT_FOUND");
@@ -121,7 +122,7 @@ export async function rejectDesignatedRequest(
   reason: string,
   runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
-  const initialDesignatedRequest = await findDesignatedRequestById(designatedRequestId);
+  const initialDesignatedRequest = await findDesignatedRequest(designatedRequestId);
 
   if (!initialDesignatedRequest) {
     throw new AppError("DESIGNATED_REQUEST_NOT_FOUND");
@@ -143,7 +144,7 @@ export async function rejectDesignatedRequest(
     const createdRejectedRequest = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
-      const targetRequest = await findCareRequestById(careRequestId, tx);
+      const targetRequest = await findCareRequest(careRequestId, tx);
 
       if (!targetRequest || targetRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
@@ -155,7 +156,7 @@ export async function rejectDesignatedRequest(
         return null;
       }
 
-      const targetDesignatedRequest = await findDesignatedRequestById(designatedRequestId, tx);
+      const targetDesignatedRequest = await findDesignatedRequest(designatedRequestId, tx);
 
       if (!targetDesignatedRequest) {
         throw new AppError("DESIGNATED_REQUEST_NOT_FOUND");
@@ -199,7 +200,7 @@ export async function rejectDesignatedRequest(
     }
 
     if (error instanceof Error && "code" in error && error.code === "P2025") {
-      const refreshedRequest = await findCareRequestById(careRequestId);
+      const refreshedRequest = await findCareRequest(careRequestId);
 
       if (refreshedRequest && refreshedRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
@@ -240,4 +241,26 @@ export async function getRejectedRequestsBySitter(
     totalCount,
     totalPages: Math.ceil(totalCount / pageSize),
   };
+}
+
+// 팟오너의 반려 사유 조회
+export async function getRejectedRequestReason(ownerId: bigint, rejectedRequestId: bigint) {
+  const rejectedRequest = await findRejectedRequest(rejectedRequestId);
+
+  if (!rejectedRequest) {
+    throw new AppError("REJECTED_REQUEST_NOT_FOUND");
+  }
+
+  const careRequest = rejectedRequest.designatedRequest.careRequest;
+
+  if (careRequest.ownerId !== ownerId) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  // 정책에 따라 팟오너의 취소한 돌봄 요청에 대한 모든 이력을 확인할 수 없다.
+  if (careRequest.status === "CANCELED") {
+    throw new AppError("CARE_REQUEST_NOT_FOUND");
+  }
+
+  return rejectedRequest.reason;
 }

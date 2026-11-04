@@ -18,7 +18,7 @@ export function findOpenCareRequest(ownerId: bigint, db: DbClient = prisma) {
 }
 
 // 특정 돌봄 요청의 존재 및 상태 확인을 위한 조회
-export function findCareRequestById(careRequestId: bigint, db: DbClient = prisma) {
+export function findCareRequest(careRequestId: bigint, db: DbClient = prisma) {
   return db.careRequest.findUnique({
     where: { id: careRequestId },
   });

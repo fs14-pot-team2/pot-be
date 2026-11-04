@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import AppError from "../errors/app-error.js";
 import {
   createDesignatedRequest,
+  getRejectedRequestReason,
   getRejectedRequestsBySitter,
   rejectDesignatedRequest,
 } from "../services/designated-request-service.js";
@@ -111,4 +112,22 @@ export async function getRejectedRequestsBySitterController(req: Request, res: R
       totalPages: result.totalPages,
     }),
   );
+}
+
+// 팟오너의 반려 사유 조회
+export async function getRejectedRequestReasonController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const ownerId = req.user.id;
+  const rejectedRequestId = parseBigId(req.params.rejectedRequestId);
+
+  if (rejectedRequestId === null) {
+    throw new AppError("INVALID_ID");
+  }
+
+  const reason = await getRejectedRequestReason(ownerId, rejectedRequestId);
+
+  res.status(200).json({ reason });
 }
