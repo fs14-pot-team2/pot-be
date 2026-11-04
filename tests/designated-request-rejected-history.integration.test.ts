@@ -148,7 +148,7 @@ async function createTestRejection(sitterId: bigint, status: CareRequestStatus, 
 }
 
 // 도메인 오류 코드와 HTTP 상태 코드 확인
-function assertAppError(code: string, statusCode: number) {
+function assertAppError(code: string, statusCode = 409) {
   return (error: unknown) =>
     error instanceof AppError && error.code === code && error.statusCode === statusCode;
 }
