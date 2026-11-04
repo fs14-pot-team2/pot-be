@@ -65,3 +65,12 @@ export async function createSitterProfileController(
     next(error);
   }
 }
+
+export async function getSitterMyPageController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await profileService.getSitterMyPage(req.user!.id);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
