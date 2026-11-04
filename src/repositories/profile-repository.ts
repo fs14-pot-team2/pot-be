@@ -116,3 +116,22 @@ export const updateSitterProfileByUserId = (userId: bigint, input: UpdateSitterP
     });
   });
 };
+
+const SITTER_MYPAGE_SELECT = {
+  userId: true,
+  profileImageUrl: true,
+  gender: true,
+  shortIntroduction: true,
+  description: true,
+  user: { select: { nickname: true } },
+  sitterServices: { select: { serviceType: true }, orderBy: { id: "asc" } },
+  sitterServiceRegions: { select: { region: true }, orderBy: { id: "asc" } },
+} as const;
+
+// 팟트너 마이페이지 조회 (닉네임 포함)
+export const findSitterMyPageByUserId = (userId: bigint) => {
+  return prisma.sitterProfile.findUnique({
+    where: { userId },
+    select: SITTER_MYPAGE_SELECT,
+  });
+};

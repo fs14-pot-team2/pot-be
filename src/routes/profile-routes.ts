@@ -5,6 +5,7 @@ import {
   getSitterProfileController,
   updateOwnerProfileController,
   updateSitterProfileController,
+  getSitterMyPageController,
 } from "../controllers/profile-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
@@ -49,3 +50,6 @@ profileRouter.patch(
   authorize("SITTER"),
   updateSitterProfileController,
 );
+
+// 마이페이지 조회 - 팟트너
+profileRouter.get("/sitters/me", authenticate, authorize("SITTER"), getSitterMyPageController);

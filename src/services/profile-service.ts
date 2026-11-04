@@ -6,12 +6,15 @@ import {
   findSitterProfileByUserId,
   updateOwnerProfileByUserId,
   updateSitterProfileByUserId,
+  findSitterMyPageByUserId,
 } from "../repositories/profile-repository.js";
 import type {
   CreateSitterProfileInput,
   UpdateOwnerProfileInput,
   UpdateSitterProfileInput,
 } from "../types/profile.js";
+
+import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 type OwnerProfileRecord = NonNullable<Awaited<ReturnType<typeof findOwnerProfileByUserId>>>;
 
@@ -115,4 +118,29 @@ export async function createSitterProfile(userId: bigint, input: CreateSitterPro
 
     throw error;
   }
+}
+
+export async function getSitterMyPage(userId: bigint) {
+  const profile = await findSitterMyPageByUserId(userId);
+
+  if (!profile) {
+    throw new AppError("PROFILE_NOT_FOUND");
+  }
+
+  const aggregates = await getSitterAggregates([profile.userId]);
+  const aggregate = aggregates.get(profile.userId)!;
+
+  return {
+    id: profile.userId.toString(),
+    nickname: profile.user.nickname,
+    profileImageUrl: profile.profileImageUrl ?? null,
+    gender: profile.gender,
+    shortIntroduction: profile.shortIntroduction,
+    description: profile.description ?? null,
+    serviceTypes: profile.sitterServices.map((service) => service.serviceType),
+    serviceRegions: profile.sitterServiceRegions.map((item) => item.region),
+    averageRating: aggregate.averageRating,
+    reviewCount: aggregate.reviewCount,
+    confirmedQuoteCount: aggregate.confirmedQuoteCount,
+  };
 }
