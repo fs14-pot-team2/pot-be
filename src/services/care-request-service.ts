@@ -6,7 +6,7 @@ import type { TransactionRunner } from "../types/db.js";
 import {
   countReceivedCareRequests,
   expireReceivedCareRequests,
-  findCareRequestById,
+  findCareRequest,
   findOpenCareRequest,
   findQuoteByCareRequestId,
   findReceivedCareRequests,
@@ -66,7 +66,7 @@ export async function createCareRequest(
       }
 
       // 만료 처리 충돌 시 트랜잭션 밖에서 최초 조회한 요청과 현재 활성 요청을 재확인
-      const refreshedRequest = await findCareRequestById(initialOpenRequestId);
+      const refreshedRequest = await findCareRequest(initialOpenRequestId);
 
       if (!refreshedRequest || refreshedRequest.status === "OPEN") {
         throw error;
@@ -111,7 +111,7 @@ export async function getActiveCareRequest(
     }
 
     // 만료 처리 충돌 시 최초 조회한 요청과 현재 활성 요청을 재확인
-    const refreshedRequest = await findCareRequestById(initialOpenRequest.id);
+    const refreshedRequest = await findCareRequest(initialOpenRequest.id);
 
     if (!refreshedRequest || refreshedRequest.status === "OPEN") {
       throw error;
@@ -136,7 +136,7 @@ export async function updateCareRequest(
   careRequestData: UpdateCareRequestInput,
   runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
-  const initialRequest = await findCareRequestById(careRequestId);
+  const initialRequest = await findCareRequest(careRequestId);
 
   if (!initialRequest) {
     throw new AppError("CARE_REQUEST_NOT_FOUND");
@@ -150,7 +150,7 @@ export async function updateCareRequest(
     const updatedRequest = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
-      const targetRequest = await findCareRequestById(careRequestId, tx);
+      const targetRequest = await findCareRequest(careRequestId, tx);
 
       if (!targetRequest || targetRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_STATUS_NOT_EDITABLE");
@@ -201,7 +201,7 @@ export async function updateCareRequest(
       throw error;
     }
 
-    const refreshedRequest = await findCareRequestById(careRequestId);
+    const refreshedRequest = await findCareRequest(careRequestId);
 
     if (refreshedRequest && refreshedRequest.status !== "OPEN") {
       throw new AppError("CARE_REQUEST_STATUS_NOT_EDITABLE");

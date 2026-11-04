@@ -2,7 +2,7 @@ import { prisma } from "../config/prisma.js";
 import { CareRequestStatus } from "../generated/prisma/enums.js";
 import AppError from "../errors/app-error.js";
 import {
-  findCareRequestById,
+  findCareRequest,
   findSitterProfileWithRegions,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
@@ -44,7 +44,7 @@ export async function ignoreCareRequest(
 
       const sitterRegions = sitterProfile.sitterServiceRegions.map(({ region }) => region);
 
-      const careRequest = await findCareRequestById(careRequestId, tx);
+      const careRequest = await findCareRequest(careRequestId, tx);
 
       if (!careRequest) {
         throw new AppError("CARE_REQUEST_NOT_FOUND");

@@ -2,7 +2,7 @@ import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
-  findCareRequestById,
+  findCareRequest,
   findSitterProfileIdByUserId,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
@@ -10,7 +10,7 @@ import {
   countDesignatedRequestsByCareRequest,
   countRejectedRequestsBySitter,
   findDesignatedRequestByCareRequestAndSitter,
-  findDesignatedRequestById,
+  findDesignatedRequest,
   findQuoteByCareRequestAndSitter,
   findRejectedRequestByDesignatedRequestId,
   findRejectedRequestsBySitter,
@@ -28,7 +28,7 @@ export async function createDesignatedRequest(
   sitterId: bigint,
   runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
-  const initialRequest = await findCareRequestById(careRequestId);
+  const initialRequest = await findCareRequest(careRequestId);
 
   if (!initialRequest) {
     throw new AppError("CARE_REQUEST_NOT_FOUND");
@@ -42,7 +42,7 @@ export async function createDesignatedRequest(
     const createdDesignatedRequest = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
-      const targetRequest = await findCareRequestById(careRequestId, tx);
+      const targetRequest = await findCareRequest(careRequestId, tx);
 
       if (!targetRequest || targetRequest.status !== "OPEN") {
         throw new AppError("ACTIVE_CARE_REQUEST_NOT_FOUND");
@@ -102,7 +102,7 @@ export async function createDesignatedRequest(
       }
 
       if (error.code === "P2025") {
-        const refreshedRequest = await findCareRequestById(careRequestId);
+        const refreshedRequest = await findCareRequest(careRequestId);
 
         if (refreshedRequest && refreshedRequest.status !== "OPEN") {
           throw new AppError("ACTIVE_CARE_REQUEST_NOT_FOUND");
@@ -121,7 +121,7 @@ export async function rejectDesignatedRequest(
   reason: string,
   runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
-  const initialDesignatedRequest = await findDesignatedRequestById(designatedRequestId);
+  const initialDesignatedRequest = await findDesignatedRequest(designatedRequestId);
 
   if (!initialDesignatedRequest) {
     throw new AppError("DESIGNATED_REQUEST_NOT_FOUND");
@@ -143,7 +143,7 @@ export async function rejectDesignatedRequest(
     const createdRejectedRequest = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
-      const targetRequest = await findCareRequestById(careRequestId, tx);
+      const targetRequest = await findCareRequest(careRequestId, tx);
 
       if (!targetRequest || targetRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
@@ -155,7 +155,7 @@ export async function rejectDesignatedRequest(
         return null;
       }
 
-      const targetDesignatedRequest = await findDesignatedRequestById(designatedRequestId, tx);
+      const targetDesignatedRequest = await findDesignatedRequest(designatedRequestId, tx);
 
       if (!targetDesignatedRequest) {
         throw new AppError("DESIGNATED_REQUEST_NOT_FOUND");
@@ -199,7 +199,7 @@ export async function rejectDesignatedRequest(
     }
 
     if (error instanceof Error && "code" in error && error.code === "P2025") {
-      const refreshedRequest = await findCareRequestById(careRequestId);
+      const refreshedRequest = await findCareRequest(careRequestId);
 
       if (refreshedRequest && refreshedRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
