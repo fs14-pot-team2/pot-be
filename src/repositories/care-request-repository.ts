@@ -56,6 +56,19 @@ export function expireCareRequest(careRequestId: bigint, db: DbClient = prisma) 
   });
 }
 
+// 시작일이 지난 모든 활성 돌봄 요청을 기간 만료 상태로 변경
+export function expireAllPastCareRequests(today: Date, db: DbClient = prisma) {
+  return db.careRequest.updateMany({
+    where: {
+      status: CareRequestStatus.OPEN,
+      startDate: { lt: today },
+    },
+    data: {
+      status: CareRequestStatus.EXPIRED,
+    },
+  });
+}
+
 // 신규 돌봄 요청 생성
 export function insertCareRequest(
   ownerId: bigint,
