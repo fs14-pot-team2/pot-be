@@ -7,6 +7,7 @@ import { errorMiddleware } from "./middlewares/error-middleware.js";
 import authRoutes from "./routes/auth-routes.js";
 import { profileRouter } from "./routes/profile-routes.js";
 import userRoutes from "./routes/user-routes.js";
+import { sitterRouter } from "./routes/sitter-routes.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -24,5 +25,7 @@ app.use("/auth", authRoutes);
 app.use(profileRouter);
 
 app.use("/users", userRoutes);
+
+app.use(sitterRouter);
 
 app.use(errorMiddleware);
