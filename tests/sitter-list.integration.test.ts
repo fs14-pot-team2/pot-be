@@ -269,6 +269,8 @@ describe("팟트너 찾기 목록 조회", () => {
       ["page 0", { page: "0" }, "INVALID_PAGE_PARAMETER"],
       ["page 문자", { page: "abc" }, "INVALID_PAGE_PARAMETER"],
       ["page 소수", { page: "1.5" }, "INVALID_PAGE_PARAMETER"],
+      ["page 안전 정수 초과", { page: "9007199254740992" }, "INVALID_PAGE_PARAMETER"],
+      ["page 앞자리 0", { page: "01" }, "INVALID_PAGE_PARAMETER"],
     ];
 
     for (const [title, query, code] of cases) {
