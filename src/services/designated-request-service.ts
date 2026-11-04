@@ -1,11 +1,9 @@
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
-import { CareRequestStatus } from "../generated/prisma/enums.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
   findCareRequestById,
   findSitterProfileIdByUserId,
-  findSitterProfileWithRegions,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
 import {
@@ -133,7 +131,7 @@ export async function rejectDesignatedRequest(
     throw new AppError("FORBIDDEN");
   }
 
-  const sitterProfile = await findSitterProfileWithRegions(sitterId);
+  const sitterProfile = await findSitterProfileIdByUserId(sitterId);
 
   if (!sitterProfile) {
     throw new AppError("FORBIDDEN");
@@ -147,7 +145,7 @@ export async function rejectDesignatedRequest(
 
       const targetRequest = await findCareRequestById(careRequestId, tx);
 
-      if (!targetRequest || targetRequest.status !== CareRequestStatus.OPEN) {
+      if (!targetRequest || targetRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
       }
 
@@ -203,7 +201,7 @@ export async function rejectDesignatedRequest(
     if (error instanceof Error && "code" in error && error.code === "P2025") {
       const refreshedRequest = await findCareRequestById(careRequestId);
 
-      if (refreshedRequest && refreshedRequest.status !== CareRequestStatus.OPEN) {
+      if (refreshedRequest && refreshedRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
       }
     }

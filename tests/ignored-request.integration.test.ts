@@ -101,6 +101,35 @@ async function createTestRequest() {
 }
 
 describe("공개 돌봄 요청 숨김", () => {
+  describe("요청 숨김 조건", () => {
+    // 기존 견적이 있으면 요청 숨김을 차단하고 견적 중복 오류를 반환하는지 확인
+    it("견적을 제출한 요청의 숨김을 차단한다", async () => {
+      const { sitterId, careRequestId } = await createTestRequest();
+
+      await prisma.quote.create({
+        data: {
+          careRequestId,
+          sitterId,
+          type: "GENERAL",
+          price: 10000,
+          comment: "테스트용 일반 견적입니다.",
+        },
+      });
+
+      await assert.rejects(
+        ignoreCareRequest(sitterId, careRequestId),
+        assertAppError("QUOTE_ALREADY_EXISTS"),
+      );
+
+      assert.equal(
+        await prisma.ignoredRequest.count({
+          where: { careRequestId, sitterId },
+        }),
+        0,
+      );
+    });
+  });
+
   describe("UNIQUE 제약 충돌 처리", () => {
     // P2002 요청 숨김 복합 UNIQUE 제약 충돌 시 중복 숨김 도메인 오류 변환 확인
     it("P2002 발생 시 요청 숨김 중복 오류를 반환한다", async () => {

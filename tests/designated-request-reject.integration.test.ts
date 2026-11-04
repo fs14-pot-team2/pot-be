@@ -303,7 +303,7 @@ describe("지정 요청 반려", () => {
       assert.equal(await prisma.rejectedRequest.count({ where: { designatedRequestId } }), 0);
     });
 
-    // 반려 트랜잭션 이전에 견적이 생성되면 저장된 견적을 기준으로 반려를 차단하는지 확인
+    // 동일 트랜잭션에서 견적을 먼저 생성한 뒤 반려 시 기존 견적을 확인하여 차단하는지 확인
     it("견적 생성 이후 지정 요청 반려를 차단한다", async () => {
       const { sitterId, careRequestId, designatedRequestId } = await createTestRequest();
 
