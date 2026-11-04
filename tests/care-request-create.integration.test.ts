@@ -122,7 +122,7 @@ function assertP2025(error: unknown) {
 describe("돌봄 요청 생성", () => {
   describe("UNIQUE 제약 충돌 처리", () => {
     // P2002 대상 UNIQUE 제약 충돌 시 중복 요청 오류 변환 확인
-    it("P2002 발생 시 활성 돌봄 요청 중복 에러를 반환한다", async () => {
+    it("P2002 발생 시 활성 돌봄 요청 중복 오류를 반환한다", async () => {
       const runTransaction = async () => {
         throw createP2002Error("CareRequest_one_open_per_owner_idx");
       };
@@ -154,7 +154,7 @@ describe("돌봄 요청 생성", () => {
 
   describe("동시 상태 변경 충돌 복구", () => {
     // P2025 이후 다른 활성 요청이 있으면 중복 에러를 반환하고 재시도하지 않는지 확인
-    it("P2025 이후 다른 활성 요청이 있으면 중복 에러를 반환한다", async () => {
+    it("P2025 이후 다른 활성 요청이 있으면 중복 오류를 반환한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const initialRequest = await prisma.careRequest.findUniqueOrThrow({
@@ -373,8 +373,8 @@ describe("돌봄 요청 생성", () => {
       assert.equal(openRequests, 0);
     });
 
-    // 재시도 중 P2002가 발생하면 중복 요청 에러로 변환하는지 확인
-    it("재시도 중 P2002 발생 시 활성 돌봄 요청 중복 에러를 반환한다", async () => {
+    // 재시도 중 P2002가 발생하면 중복 요청 오류로 변환하는지 확인
+    it("재시도 중 P2002 발생 시 활성 돌봄 요청 중복 오류를 반환한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
       const initialRequest = await prisma.careRequest.findUniqueOrThrow({

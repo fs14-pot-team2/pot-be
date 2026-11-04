@@ -67,3 +67,40 @@ export function insertDesignatedRequest(
     },
   });
 }
+
+// 지정 요청의 존재 및 대상 팟트너 확인
+export function findDesignatedRequestById(designatedRequestId: bigint, db: DbClient = prisma) {
+  return db.designatedRequest.findUnique({
+    where: { id: designatedRequestId },
+    select: {
+      id: true,
+      careRequestId: true,
+      sitterId: true,
+    },
+  });
+}
+
+// 동일 지정 요청의 기존 반려 여부 확인
+export function findRejectedRequestByDesignatedRequestId(
+  designatedRequestId: bigint,
+  db: DbClient = prisma,
+) {
+  return db.rejectedRequest.findUnique({
+    where: { designatedRequestId },
+    select: { id: true },
+  });
+}
+
+// 신규 지정 요청 반려 생성
+export function insertRejectedRequest(
+  designatedRequestId: bigint,
+  reason: string,
+  db: DbClient = prisma,
+) {
+  return db.rejectedRequest.create({
+    data: {
+      designatedRequestId,
+      reason,
+    },
+  });
+}

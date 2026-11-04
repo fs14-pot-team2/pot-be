@@ -106,7 +106,7 @@ describe("돌봄 요청 수정", () => {
     });
 
     // 수정 불가 상태에 따른 도메인 오류 반환 확인
-    it("MATCHED, CANCELED, EXPIRED 요청은 수정할 수 없다", async () => {
+    it("MATCHED, CANCELED, EXPIRED 요청의 수정을 차단한다", async () => {
       for (const status of ["MATCHED", "CANCELED", "EXPIRED"] as const) {
         const { ownerId, careRequestId } = await createTestRequest();
 
@@ -125,7 +125,7 @@ describe("돌봄 요청 수정", () => {
     });
 
     // 만료 처리 결과가 롤백되지 않고 EXPIRED로 커밋되는지 확인
-    it("시작일이 지난 요청은 만료 처리 후 수정을 거부한다", async () => {
+    it("시작일이 지난 요청은 만료 처리 후 수정을 차단한다", async () => {
       const { ownerId, careRequestId } = await createTestRequest(futureDate(-1));
 
       await assert.rejects(
@@ -143,7 +143,7 @@ describe("돌봄 요청 수정", () => {
       assert.equal(savedRequest.detailAddress, "기존 상세 주소");
     });
 
-    // 기존 날짜와 수정 날짜의 조합이 잘못되면 변경 없이 거부하는지 확인
+    // 기존 날짜와 수정 날짜의 조합이 잘못되면 변경 없이 차단하는지 확인
     it("최종 날짜 검증 실패 시 DB 데이터를 변경하지 않는다", async () => {
       const { ownerId, careRequestId } = await createTestRequest();
 
@@ -249,7 +249,7 @@ describe("돌봄 요청 수정", () => {
   describe("동시 상태 변경 충돌 복구", () => {
     // P2025 발생 후 최초 요청의 최신 상태에 따른 도메인 오류 변환 확인
     for (const status of ["EXPIRED", "MATCHED", "CANCELED"] as const) {
-      it(`P2025 이후 ${status} 상태면 수정 불가 에러를 반환한다`, async () => {
+      it(`P2025 이후 ${status} 상태면 수정 불가 오류를 반환한다`, async () => {
         const { ownerId, careRequestId } = await createTestRequest();
 
         const runTransaction = async () => {

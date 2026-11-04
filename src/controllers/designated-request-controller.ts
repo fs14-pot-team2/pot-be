@@ -1,8 +1,14 @@
 import type { Request, Response } from "express";
 import AppError from "../errors/app-error.js";
-import { createDesignatedRequest } from "../services/designated-request-service.js";
+import {
+  createDesignatedRequest,
+  rejectDesignatedRequest,
+} from "../services/designated-request-service.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
-import { validateCreateDesignatedRequest } from "../validators/designated-request-validator.js";
+import {
+  validateCreateDesignatedRequest,
+  validateRejectDesignatedRequest,
+} from "../validators/designated-request-validator.js";
 
 // 팟오너의 지정 요청 생성
 export async function createDesignatedRequestController(req: Request, res: Response) {
@@ -29,4 +35,35 @@ export async function createDesignatedRequestController(req: Request, res: Respo
   };
 
   res.status(201).json(serializeBigInt(designatedRequestResponse));
+}
+
+// 팟트너의 지정 요청 반려
+export async function rejectDesignatedRequestController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const sitterId = req.user.id;
+  const designatedRequestId = parseBigId(req.params.designatedRequestId);
+
+  if (designatedRequestId === null) {
+    throw new AppError("INVALID_ID");
+  }
+
+  const reason = validateRejectDesignatedRequest(req.body);
+
+  const createdRejectedRequest = await rejectDesignatedRequest(
+    sitterId,
+    designatedRequestId,
+    reason,
+  );
+
+  const rejectedRequestResponse = {
+    id: createdRejectedRequest.id,
+    designatedRequestId: createdRejectedRequest.designatedRequestId,
+    reason: createdRejectedRequest.reason,
+    createdAt: createdRejectedRequest.createdAt,
+  };
+
+  res.status(201).json(serializeBigInt(rejectedRequestResponse));
 }
