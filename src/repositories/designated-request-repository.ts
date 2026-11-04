@@ -69,7 +69,7 @@ export function insertDesignatedRequest(
 }
 
 // 지정 요청의 존재 및 대상 팟트너 확인
-export function findDesignatedRequestById(designatedRequestId: bigint, db: DbClient = prisma) {
+export function findDesignatedRequest(designatedRequestId: bigint, db: DbClient = prisma) {
   return db.designatedRequest.findUnique({
     where: { id: designatedRequestId },
     select: {
@@ -88,6 +88,26 @@ export function findRejectedRequestByDesignatedRequestId(
   return db.rejectedRequest.findUnique({
     where: { designatedRequestId },
     select: { id: true },
+  });
+}
+
+// 팟오너의 반려 사유 조회
+export function findRejectedRequest(rejectedRequestId: bigint, db: DbClient = prisma) {
+  return db.rejectedRequest.findUnique({
+    where: { id: rejectedRequestId },
+    select: {
+      reason: true,
+      designatedRequest: {
+        select: {
+          careRequest: {
+            select: {
+              ownerId: true,
+              status: true,
+            },
+          },
+        },
+      },
+    },
   });
 }
 

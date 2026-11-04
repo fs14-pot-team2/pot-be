@@ -12,6 +12,7 @@ import {
   findDesignatedRequestByCareRequestAndSitter,
   findDesignatedRequest,
   findQuoteByCareRequestAndSitter,
+  findRejectedRequest,
   findRejectedRequestByDesignatedRequestId,
   findRejectedRequestsBySitter,
   findSitterByIdAndRole,
@@ -240,4 +241,26 @@ export async function getRejectedRequestsBySitter(
     totalCount,
     totalPages: Math.ceil(totalCount / pageSize),
   };
+}
+
+// 팟오너의 반려 사유 조회
+export async function getRejectedRequestReason(ownerId: bigint, rejectedRequestId: bigint) {
+  const rejectedRequest = await findRejectedRequest(rejectedRequestId);
+
+  if (!rejectedRequest) {
+    throw new AppError("REJECTED_REQUEST_NOT_FOUND");
+  }
+
+  const careRequest = rejectedRequest.designatedRequest.careRequest;
+
+  if (careRequest.ownerId !== ownerId) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  // 정책에 따라 팟오너의 취소한 돌봄 요청에 대한 모든 이력을 확인할 수 없다.
+  if (careRequest.status === "CANCELED") {
+    throw new AppError("CARE_REQUEST_NOT_FOUND");
+  }
+
+  return rejectedRequest.reason;
 }

@@ -7,6 +7,7 @@ import {
 } from "../controllers/care-request-controller.js";
 import {
   createDesignatedRequestController,
+  getRejectedRequestReasonController,
   getRejectedRequestsBySitterController,
   rejectDesignatedRequestController,
 } from "../controllers/designated-request-controller.js";
@@ -15,7 +16,8 @@ import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
 export const careRequestRouter = Router();
 
-// 팟오너의 활성 돌봄 요청 조회
+// 팟오너
+// 활성 돌봄 요청 조회
 careRequestRouter.get(
   "/me/active",
   authenticate,
@@ -23,10 +25,10 @@ careRequestRouter.get(
   getActiveCareRequestController,
 );
 
-// 팟오너 돌봄 요청 생성
+// 돌봄 요청 생성
 careRequestRouter.post("/", authenticate, authorize("OWNER"), createCareRequestController);
 
-// 팟오너의 돌봄 요청 수정
+// 돌봄 요청 수정
 careRequestRouter.patch(
   "/:careRequestId",
   authenticate,
@@ -34,7 +36,7 @@ careRequestRouter.patch(
   updateCareRequestController,
 );
 
-// 팟오너의 지정 요청 생성
+// 지정 요청 생성
 careRequestRouter.post(
   "/:careRequestId/designated-requests",
   authenticate,
@@ -42,7 +44,16 @@ careRequestRouter.post(
   createDesignatedRequestController,
 );
 
-// 팟트너의 지정 요청 반려
+// 반려 사유 조회
+careRequestRouter.get(
+  "/rejected-requests/:rejectedRequestId",
+  authenticate,
+  authorize("OWNER"),
+  getRejectedRequestReasonController,
+);
+
+// 팟트너
+// 지정 요청 반려
 careRequestRouter.post(
   "/designated-requests/:designatedRequestId/reject",
   authenticate,
@@ -50,7 +61,7 @@ careRequestRouter.post(
   rejectDesignatedRequestController,
 );
 
-// 팟트너의 받은 돌봄 요청 목록 조회
+// 받은 돌봄 요청 목록 조회
 careRequestRouter.get(
   "/received",
   authenticate,
@@ -58,7 +69,7 @@ careRequestRouter.get(
   getReceivedCareRequestsController,
 );
 
-// 팟트너의 공개 돌봄 요청 숨김 처리
+// 공개 돌봄 요청 숨김 처리
 careRequestRouter.post(
   "/:careRequestId/ignore",
   authenticate,
@@ -66,7 +77,7 @@ careRequestRouter.post(
   ignoreCareRequestController,
 );
 
-// 팟트너의 반려 요청 이력 목록 조회
+// 반려 요청 이력 목록 조회
 careRequestRouter.get(
   "/me/rejected",
   authenticate,
