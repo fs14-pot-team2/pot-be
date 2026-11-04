@@ -123,6 +123,14 @@ export function findSitterProfileWithRegions(sitterId: bigint, db: DbClient = pr
   });
 }
 
+// 팟트너 프로필 등록 여부 확인
+export function findSitterProfileIdByUserId(sitterId: bigint, db: DbClient = prisma) {
+  return db.sitterProfile.findUnique({
+    where: { userId: sitterId },
+    select: { id: true },
+  });
+}
+
 // 팟트너가 받을 수 있는 돌봄 요청 중 시작일이 지난 요청을 만료 처리
 export function expireReceivedCareRequests(
   sitterId: bigint,

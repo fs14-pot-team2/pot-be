@@ -85,9 +85,8 @@ export async function ignoreCareRequest(
       }
 
       const existingQuote = await findQuoteByCareRequestAndSitter(careRequestId, sitterId, tx);
-      // 견적 제출 완료 요청은 받은 요청 목록에서 제외되므로 동일하게 404 처리
       if (existingQuote) {
-        throw new AppError("CARE_REQUEST_NOT_FOUND");
+        throw new AppError("QUOTE_ALREADY_EXISTS");
       }
 
       return insertIgnoredRequest(careRequestId, sitterId, tx);

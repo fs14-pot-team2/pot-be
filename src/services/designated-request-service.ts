@@ -1,18 +1,19 @@
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
-import { CareRequestStatus } from "../generated/prisma/enums.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
   findCareRequestById,
-  findSitterProfileWithRegions,
+  findSitterProfileIdByUserId,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
 import {
   countDesignatedRequestsByCareRequest,
+  countRejectedRequestsBySitter,
   findDesignatedRequestByCareRequestAndSitter,
   findDesignatedRequestById,
   findQuoteByCareRequestAndSitter,
   findRejectedRequestByDesignatedRequestId,
+  findRejectedRequestsBySitter,
   findSitterByIdAndRole,
   insertDesignatedRequest,
   insertRejectedRequest,
@@ -130,7 +131,7 @@ export async function rejectDesignatedRequest(
     throw new AppError("FORBIDDEN");
   }
 
-  const sitterProfile = await findSitterProfileWithRegions(sitterId);
+  const sitterProfile = await findSitterProfileIdByUserId(sitterId);
 
   if (!sitterProfile) {
     throw new AppError("FORBIDDEN");
@@ -144,7 +145,7 @@ export async function rejectDesignatedRequest(
 
       const targetRequest = await findCareRequestById(careRequestId, tx);
 
-      if (!targetRequest || targetRequest.status !== CareRequestStatus.OPEN) {
+      if (!targetRequest || targetRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
       }
 
@@ -200,11 +201,43 @@ export async function rejectDesignatedRequest(
     if (error instanceof Error && "code" in error && error.code === "P2025") {
       const refreshedRequest = await findCareRequestById(careRequestId);
 
-      if (refreshedRequest && refreshedRequest.status !== CareRequestStatus.OPEN) {
+      if (refreshedRequest && refreshedRequest.status !== "OPEN") {
         throw new AppError("CARE_REQUEST_NOT_FOUND");
       }
     }
 
     throw error;
   }
+}
+
+// 팟트너의 반려 요청 이력 목록 조회
+export async function getRejectedRequestsBySitter(
+  sitterId: bigint,
+  page: number,
+  pageSize: number,
+) {
+  const sitterProfile = await findSitterProfileIdByUserId(sitterId);
+
+  if (!sitterProfile) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  const skip = (page - 1) * pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const [totalCount, items] = await Promise.all([
+    countRejectedRequestsBySitter(sitterId),
+    findRejectedRequestsBySitter(sitterId, skip, pageSize),
+  ]);
+
+  return {
+    items,
+    page,
+    pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
 }
