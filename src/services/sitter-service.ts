@@ -1,9 +1,20 @@
+import AppError from "../errors/app-error.js";
 import {
+  findDesignationRelation,
+  findSitterDetailByUserId,
   findSitterListByUserIds,
   findSitterUserIdsByFilter,
 } from "../repositories/sitter-repository.js";
-import type { SitterListQuery } from "../types/sitter.js";
+import {
+  DESIGNATED_REQUEST_STATUS,
+  type SitterListQuery,
+  type SitterViewer,
+} from "../types/sitter.js";
+import { getActiveCareRequest } from "./care-request-service.js";
+import type { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
+
+const MAX_DESIGNATED_REQUESTS = 3;
 
 export async function getSitterList(query: SitterListQuery) {
   const { page, pageSize, ...filter } = query;
@@ -55,5 +66,63 @@ export async function getSitterList(query: SitterListQuery) {
     pageSize,
     totalCount,
     totalPages: Math.ceil(totalCount / pageSize),
+  };
+}
+
+// 현재 로그인한 팟오너의 활성 돌봄 요청과 해당 팟트너의 관계로 지정 요청 가능 여부 계산
+async function getDesignatedRequestStatus(
+  ownerId: bigint,
+  sitterId: bigint,
+  expireCareRequestIfPastFn?: typeof expireCareRequestIfPast,
+) {
+  // 만료 처리와 P2025 충돌 복구는 getActiveCareRequest가 담당
+  const careRequest = await getActiveCareRequest(ownerId, expireCareRequestIfPastFn);
+  if (!careRequest) {
+    return DESIGNATED_REQUEST_STATUS.NO_ACTIVE_REQUEST;
+  }
+
+  const { designatedCount, hasDesignated, hasQuote } = await findDesignationRelation(
+    careRequest.id,
+    sitterId,
+  );
+
+  if (hasQuote) return DESIGNATED_REQUEST_STATUS.ALREADY_SENT_QUOTE;
+  if (hasDesignated) return DESIGNATED_REQUEST_STATUS.ALREADY_DESIGNATED;
+  if (designatedCount >= MAX_DESIGNATED_REQUESTS) {
+    return DESIGNATED_REQUEST_STATUS.LIMIT_EXCEEDED;
+  }
+  return DESIGNATED_REQUEST_STATUS.AVAILABLE;
+}
+
+// 비로그인은 허용, 로그인했다면 OWNER만 조회 가능
+export async function getSitterDetail(
+  sitterId: bigint,
+  viewer?: SitterViewer,
+  expireCareRequestIfPastFn?: typeof expireCareRequestIfPast,
+) {
+  if (viewer && viewer.role !== "OWNER") {
+    throw new AppError("SITTER_PROFILE_ACCESS_FORBIDDEN");
+  }
+
+  const profile = await findSitterDetailByUserId(sitterId);
+  if (!profile) throw new AppError("SITTER_NOT_FOUND");
+
+  const aggregate = (await getSitterAggregates([sitterId])).get(sitterId);
+
+  return {
+    id: profile.userId.toString(),
+    nickname: profile.user.nickname,
+    profileImageUrl: profile.profileImageUrl ?? null,
+    gender: profile.gender,
+    shortIntroduction: profile.shortIntroduction,
+    description: profile.description ?? null,
+    serviceTypes: profile.sitterServices.map((service) => service.serviceType),
+    serviceRegions: profile.sitterServiceRegions.map((item) => item.region),
+    averageRating: aggregate?.averageRating ?? 0,
+    reviewCount: aggregate?.reviewCount ?? 0,
+    confirmedQuoteCount: aggregate?.confirmedQuoteCount ?? 0,
+    designatedRequestStatus: viewer
+      ? await getDesignatedRequestStatus(viewer.id, sitterId, expireCareRequestIfPastFn)
+      : null,
   };
 }
