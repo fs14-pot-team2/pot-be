@@ -230,7 +230,10 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
     ...new Set([...sitterRegions, ...designatedRegions.map(({ region }) => region)]),
   ];
 
-  if (query.regions.length > 0 && query.regions.length >= availableRegions.length) {
+  if (
+    query.regions.some((region) => !availableRegions.includes(region)) ||
+    (query.regions.length > 0 && query.regions.length >= availableRegions.length)
+  ) {
     throw new AppError("INVALID_REGION");
   }
 
