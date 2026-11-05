@@ -73,18 +73,13 @@ export const findSitterProfileByUserId = (userId: bigint) => {
 // 팟트너 프로필 수정: 공개 요청 숨김과 같은 SitterProfile 행 잠금
 export const updateSitterProfileByUserId = (userId: bigint, input: UpdateSitterProfileInput) => {
   return prisma.$transaction(async (tx) => {
-    const locked = await tx.$queryRaw<{ id: bigint }[]>`
-      SELECT "id"
-      FROM "SitterProfile"
-      WHERE "userId" = ${userId}
-      FOR UPDATE
-    `;
+    const lockedProfile = await lockSitterProfileByUserId(userId, tx);
 
-    if (locked.length === 0) {
+    if (!lockedProfile) {
       return null;
     }
 
-    const sitterProfileId = locked[0].id;
+    const sitterProfileId = lockedProfile.id;
 
     // undefined 필드는 무시되고, 빈 body여도 update되어 updatedAt이 갱신됨
     await tx.sitterProfile.update({
