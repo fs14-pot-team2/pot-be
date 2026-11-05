@@ -12,6 +12,7 @@ import {
   rejectDesignatedRequestController,
 } from "../controllers/designated-request-controller.js";
 import { ignoreCareRequestController } from "../controllers/ignored-request-controller.js";
+import { createQuoteController } from "../controllers/quote-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
 export const careRequestRouter = Router();
@@ -75,6 +76,14 @@ careRequestRouter.post(
   authenticate,
   authorize("SITTER"),
   ignoreCareRequestController,
+);
+
+// 견적 생성
+careRequestRouter.post(
+  "/:careRequestId/quotes",
+  authenticate,
+  authorize("SITTER"),
+  createQuoteController,
 );
 
 // 반려 요청 이력 목록 조회
