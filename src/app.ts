@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth-routes.js";
 import { profileRouter } from "./routes/profile-routes.js";
 import userRoutes from "./routes/user-routes.js";
 import { sitterRouter } from "./routes/sitter-routes.js";
+import { imageRouter } from "./routes/image-routes.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -27,5 +28,7 @@ app.use(profileRouter);
 app.use("/users", userRoutes);
 
 app.use(sitterRouter);
+
+app.use("/images", imageRouter);
 
 app.use(errorMiddleware);
