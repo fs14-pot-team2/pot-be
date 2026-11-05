@@ -132,7 +132,7 @@ model CareRequest {
   address            String
   detailAddress      String?
   sido               String
-  sigungu            String
+  sigungu            String?
   bname              String?
   region             Region
   status             CareRequestStatus

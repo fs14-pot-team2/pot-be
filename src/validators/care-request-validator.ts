@@ -12,7 +12,7 @@ export interface CreateCareRequestInput {
   address: string;
   detailAddress: string | null;
   sido: string;
-  sigungu: string;
+  sigungu: string | null;
   bname: string | null;
   region: Region;
 }
@@ -169,7 +169,7 @@ export function validateUpdateCareRequest(body: unknown): UpdateCareRequestInput
   }
 
   if ("sigungu" in body) {
-    careRequestData.sigungu = requireString(body.sigungu);
+    careRequestData.sigungu = optionalString(body.sigungu);
   }
 
   if ("bname" in body) {
@@ -188,7 +188,7 @@ export function validateCreateCareRequest(body: unknown): CreateCareRequestInput
   const address = requireString(body.address);
   const detailAddress = optionalString(body.detailAddress);
   const sido = requireString(body.sido);
-  const sigungu = requireString(body.sigungu);
+  const sigungu = optionalString(body.sigungu);
   const bname = optionalString(body.bname);
 
   const serviceType = validateServiceType(body.serviceType);
