@@ -12,9 +12,15 @@ import {
 } from "../repositories/designated-request-repository.js";
 import { findIgnoredRequestByCareRequestAndSitter } from "../repositories/ignored-request-repository.js";
 import { lockSitterProfileByUserId } from "../repositories/profile-repository.js";
-import { countGeneralQuotesByCareRequest, insertQuote } from "../repositories/quote-repository.js";
+import {
+  countGeneralQuotesByCareRequest,
+  findQuote,
+  insertQuote,
+  updateQuote,
+} from "../repositories/quote-repository.js";
 import type { TransactionRunner } from "../types/db.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import type { CreateQuoteInput } from "../validators/quote-validator.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 
 // 팟트너의 돌봄 요청에 대한 견적 생성
@@ -125,6 +131,80 @@ export async function createQuote(
           throw new AppError("QUOTE_EDIT_NOT_ALLOWED");
         }
       }
+    }
+
+    throw error;
+  }
+}
+
+// 팟트너의 기존 견적 수정
+export async function updateQuoteService(
+  sitterId: bigint,
+  quoteId: bigint,
+  quoteData: Partial<CreateQuoteInput>,
+  runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
+) {
+  const initialQuote = await findQuote(quoteId);
+
+  if (!initialQuote) {
+    throw new AppError("QUOTE_NOT_FOUND");
+  }
+
+  if (initialQuote.sitterId !== sitterId) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  const careRequestId = initialQuote.careRequestId;
+
+  try {
+    const updatedQuote = await runTransaction(async (tx) => {
+      await lockCareRequestForUpdate(careRequestId, tx);
+
+      const careRequest = await findCareRequest(careRequestId, tx);
+
+      if (!careRequest) {
+        throw new AppError("CARE_REQUEST_NOT_FOUND");
+      }
+
+      // 견적 확정 시 CareRequest.status와 confirmedQuoteId는 동일 트랜잭션에서 변경하므로
+      // 견적 수정 가능 여부는 OPEN 상태로 판단하고 확정 ID를 중복 검증하지 않음
+      if (careRequest.status !== "OPEN") {
+        throw new AppError("QUOTE_EDIT_NOT_ALLOWED");
+      }
+
+      const wasExpired = await expireCareRequestIfPast(careRequest, tx);
+
+      if (wasExpired) {
+        return null;
+      }
+
+      const targetQuote = await findQuote(quoteId, tx);
+
+      if (!targetQuote) {
+        throw new AppError("QUOTE_NOT_FOUND");
+      }
+
+      if (targetQuote.sitterId !== sitterId) {
+        throw new AppError("FORBIDDEN");
+      }
+
+      return updateQuote(quoteId, quoteData, tx);
+    });
+
+    if (!updatedQuote) {
+      throw new AppError("QUOTE_EDIT_NOT_ALLOWED");
+    }
+
+    return updatedQuote;
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "P2025")) {
+      throw error;
+    }
+
+    const refreshedRequest = await findCareRequest(careRequestId);
+
+    if (refreshedRequest && refreshedRequest.status !== "OPEN") {
+      throw new AppError("QUOTE_EDIT_NOT_ALLOWED");
     }
 
     throw error;
