@@ -14,6 +14,7 @@ import {
   findIgnoredRequestByCareRequestAndSitter,
   insertIgnoredRequest,
 } from "../repositories/ignored-request-repository.js";
+import { lockSitterProfileByUserId } from "../repositories/profile-repository.js";
 import type { TransactionRunner } from "../types/db.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
@@ -27,13 +28,7 @@ export async function ignoreCareRequest(
   try {
     const ignoredRequest = await runTransaction(async (tx) => {
       // 서비스 지역은 공개 요청 수신 자격을 결정하므로, 지역 변경과 숨김 처리의 순차적 실행을 보장하기 위해 동일한 프로필 행을 잠금
-      await tx.$queryRaw`
-        SELECT "id"
-        FROM "SitterProfile"
-        WHERE "userId" = ${sitterId}
-        FOR UPDATE
-      `;
-
+      await lockSitterProfileByUserId(sitterId, tx);
       await lockCareRequestForUpdate(careRequestId, tx);
 
       const sitterProfile = await findSitterProfileWithRegions(sitterId, tx);
