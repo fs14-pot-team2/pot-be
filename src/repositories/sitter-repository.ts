@@ -11,6 +11,8 @@ const SITTER_LIST_SELECT = {
   sitterServiceRegions: { select: { region: true }, orderBy: { id: "asc" } },
 } as const;
 
+const SITTER_DETAIL_SELECT = { ...SITTER_LIST_SELECT, description: true } as const;
+
 function buildWhere(filter: SitterListFilter) {
   return {
     ...(filter.keyword && {
@@ -41,4 +43,33 @@ export const findSitterListByUserIds = (userIds: bigint[]) => {
     where: { userId: { in: userIds } },
     select: SITTER_LIST_SELECT,
   });
+};
+
+// 팟트너 상세 조회 (프로필 미등록이면 null)
+export const findSitterDetailByUserId = (userId: bigint) => {
+  return prisma.sitterProfile.findUnique({
+    where: { userId },
+    select: SITTER_DETAIL_SELECT,
+  });
+};
+
+// 지정 요청 가능 여부 판단용 (반려된 지정 요청도 한도에 포함)
+export const findDesignationRelation = async (careRequestId: bigint, sitterId: bigint) => {
+  const [designatedCount, designatedToSitter, quote] = await Promise.all([
+    prisma.designatedRequest.count({ where: { careRequestId } }),
+    prisma.designatedRequest.findFirst({
+      where: { careRequestId, sitterId },
+      select: { id: true },
+    }),
+    prisma.quote.findFirst({
+      where: { careRequestId, sitterId },
+      select: { id: true },
+    }),
+  ]);
+
+  return {
+    designatedCount,
+    hasDesignated: designatedToSitter !== null,
+    hasQuote: quote !== null,
+  };
 };

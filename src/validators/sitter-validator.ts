@@ -2,6 +2,7 @@ import AppError from "../errors/app-error.js";
 import type { ErrorCode } from "../errors/error-definitions.js";
 import { Gender, Region, ServiceType } from "../generated/prisma/enums.js";
 import type { SitterListQuery } from "../types/sitter.js";
+import { parseBigId } from "../utils/bigint.js";
 
 import { validatePagination } from "./pagination-validator.js";
 
@@ -46,4 +47,10 @@ export function validateSitterListQuery(query: Record<string, unknown>): SitterL
     page,
     pageSize,
   };
+}
+
+export function validateSitterIdParam(value: unknown): bigint {
+  const id = parseBigId(value);
+  if (id === null) throw new AppError("INVALID_ID");
+  return id;
 }
