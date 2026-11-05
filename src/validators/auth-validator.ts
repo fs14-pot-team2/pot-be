@@ -14,9 +14,10 @@ export interface LoginInput {
   role: UserRole;
 }
 
+export const NICKNAME_REGEX = /^[가-힣a-zA-Z0-9]{2,7}$/;
+export const PASSWORD_REGEX = /^[A-Za-z0-9!@#$]{8,20}$/;
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const NICKNAME_REGEX = /^[가-힣a-zA-Z0-9]{2,7}$/;
-const PASSWORD_REGEX = /^[A-Za-z0-9!@#$]{8,20}$/;
 
 export function validateSignup(body: unknown): SignupInput {
   if (typeof body !== "object" || body === null) {
