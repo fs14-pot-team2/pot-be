@@ -87,6 +87,7 @@ function createQuery(
     pageSize: 100,
     serviceTypes: [],
     designatedOnly: false,
+    regions: [],
     keyword,
     sort: "LATEST",
     ...overrides,
@@ -243,7 +244,7 @@ describe("받은 요청 목록 조회", () => {
         sitterId,
         createQuery(keyword, {
           serviceTypes: ["SHORT_CARE"],
-          region: "SEOUL",
+          regions: ["SEOUL"],
           pageSize: 1,
         }),
       );

@@ -230,6 +230,10 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
     ...new Set([...sitterRegions, ...designatedRegions.map(({ region }) => region)]),
   ];
 
+  if (query.regions.length > 0 && query.regions.length >= availableRegions.length) {
+    throw new AppError("INVALID_REGION");
+  }
+
   const where: Prisma.CareRequestWhereInput = {
     status: CareRequestStatus.OPEN,
     startDate: { gte: today },
@@ -257,7 +261,9 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
     ...(query.serviceTypes.length > 0 && {
       serviceType: { in: query.serviceTypes },
     }),
-    ...(query.region && { region: query.region }),
+    ...(query.regions.length > 0 && {
+      region: { in: query.regions },
+    }),
     ...(query.keyword && {
       owner: {
         nickname: { contains: query.keyword },

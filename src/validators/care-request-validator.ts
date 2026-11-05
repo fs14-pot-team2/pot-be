@@ -214,7 +214,7 @@ export type ReceivedCareRequestsQuery = {
   pageSize: number;
   serviceTypes: ServiceType[];
   designatedOnly: boolean;
-  region?: Region;
+  regions: Region[];
   keyword: string;
   sort: "LATEST" | "START_DATE_ASC";
 };
@@ -239,6 +239,10 @@ export function validateReceivedCareRequestsQuery(
     }
 
     serviceTypes = [...new Set(values)] as ServiceType[];
+
+    if (serviceTypes.length > 1) {
+      throw new AppError("INVALID_SERVICE_TYPE");
+    }
   }
 
   let designatedOnly = false;
@@ -251,17 +255,20 @@ export function validateReceivedCareRequestsQuery(
     designatedOnly = query.designatedOnly === "true";
   }
 
-  let region: Region | undefined;
+  let regions: Region[] = [];
 
-  if (query.region !== undefined) {
-    if (
-      typeof query.region !== "string" ||
-      !Object.values(Region).some((value) => value === query.region)
-    ) {
+  if (query.regions !== undefined) {
+    if (typeof query.regions !== "string") {
       throw new AppError("INVALID_REGION");
     }
 
-    region = query.region as Region;
+    const values = query.regions.split(",");
+
+    if (values.some((value) => !Object.values(Region).some((region) => region === value))) {
+      throw new AppError("INVALID_REGION");
+    }
+
+    regions = [...new Set(values)] as Region[];
   }
 
   if (query.keyword !== undefined && typeof query.keyword !== "string") {
@@ -281,7 +288,7 @@ export function validateReceivedCareRequestsQuery(
     pageSize,
     serviceTypes,
     designatedOnly,
-    region,
+    regions,
     keyword,
     sort,
   };
