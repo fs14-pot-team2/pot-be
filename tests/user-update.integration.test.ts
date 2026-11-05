@@ -10,11 +10,16 @@ import { validateUpdateMe } from "../src/validators/user-validator.js";
 
 const PREFIX = `up-${randomUUID().slice(0, 8)}`;
 
+// 닉네임 정책(한영숫자 2~7자)을 만족하는 랜덤 닉네임
+function shortNickname() {
+  return randomUUID().replace(/-/g, "").slice(0, 7);
+}
+
 async function createUser(role: "OWNER" | "SITTER" = "OWNER") {
   return prisma.user.create({
     data: {
       email: `${PREFIX}-${randomUUID()}@example.com`,
-      nickname: `${PREFIX}-${randomUUID().slice(0, 4)}`,
+      nickname: shortNickname(),
       passwordHash: await hashPassword("Password1!"),
       role,
     },
@@ -29,9 +34,9 @@ function assertAppError(code: string, statusCode: number) {
 describe("본인 개인정보 수정", () => {
   it("닉네임을 수정하고 passwordHash는 포함하지 않는다", async () => {
     const user = await createUser();
-    const nickname = `${PREFIX}-new1`;
+    const nickname = shortNickname();
 
-    const result = await updateMe(user.id, { nickname });
+    const result = await updateMe(user.id, validateUpdateMe({ nickname }));
 
     assert.equal(result.nickname, nickname);
     assert.equal(result.email, user.email);
@@ -41,7 +46,8 @@ describe("본인 개인정보 수정", () => {
   it("비밀번호를 수정하면 새 비밀번호로 확인된다", async () => {
     const user = await createUser();
 
-    await updateMe(user.id, { password: "NewPass1!" });
+    // 비밀번호 수정
+    await updateMe(user.id, validateUpdateMe({ password: "NewPass1!" }));
 
     const saved = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     assert.ok(await verifyPassword("NewPass1!", saved.passwordHash));
@@ -60,7 +66,8 @@ describe("본인 개인정보 수정", () => {
   it("자기 현재 닉네임으로 수정해도 통과한다", async () => {
     const user = await createUser();
 
-    const result = await updateMe(user.id, { nickname: user.nickname });
+    // 자기 현재 닉네임
+    const result = await updateMe(user.id, validateUpdateMe({ nickname: user.nickname }));
 
     assert.equal(result.nickname, user.nickname);
   });
@@ -70,7 +77,8 @@ describe("본인 개인정보 수정", () => {
     const other = await createUser();
 
     await assert.rejects(
-      () => updateMe(user.id, { nickname: other.nickname }),
+      //같은 역할 중복
+      () => updateMe(user.id, validateUpdateMe({ nickname: other.nickname })),
       assertAppError("NICKNAME_ALREADY_EXISTS", 409),
     );
   });
@@ -79,7 +87,8 @@ describe("본인 개인정보 수정", () => {
     const owner = await createUser("OWNER");
     const sitter = await createUser("SITTER");
 
-    const result = await updateMe(sitter.id, { nickname: owner.nickname });
+    // 다른 역할 같은 닉네임
+    const result = await updateMe(sitter.id, validateUpdateMe({ nickname: owner.nickname }));
 
     assert.equal(result.nickname, owner.nickname);
   });
@@ -121,5 +130,14 @@ describe("본인 개인정보 수정", () => {
         assertAppError("INVALID_PASSWORD_FORMAT", 400),
       );
     });
+
+    for (const nickname of ["가", "12345678", "a-b", "a b", "닉네임!"]) {
+      it(`닉네임 "${nickname}"은 INVALID_NICKNAME_FORMAT이다`, () => {
+        assert.throws(
+          () => validateUpdateMe({ nickname }),
+          assertAppError("INVALID_NICKNAME_FORMAT", 400),
+        );
+      });
+    }
   });
 });
