@@ -70,6 +70,7 @@ export const findDesignationRelation = async (careRequestId: bigint, sitterId: b
   return {
     designatedCount,
     hasDesignated: designatedToSitter !== null,
+    designatedRequestId: designatedToSitter?.id ?? null,
     hasQuote: quote !== null,
   };
 };

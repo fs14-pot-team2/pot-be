@@ -69,8 +69,9 @@ export async function getSitterList(query: SitterListQuery) {
   };
 }
 
-// 현재 로그인한 팟오너의 활성 돌봄 요청과 해당 팟트너의 관계로 지정 요청 가능 여부 계산
-async function getDesignatedRequestStatus(
+// 현재 로그인한 팟오너의 활성 돌봄 요청과 해당 팟트너의 관계로
+// 지정 요청 가능 여부(status)와 지정 요청 ID 계산
+async function getDesignatedRequestInfo(
   ownerId: bigint,
   sitterId: bigint,
   expireCareRequestIfPastFn?: typeof expireCareRequestIfPast,
@@ -78,20 +79,30 @@ async function getDesignatedRequestStatus(
   // 만료 처리와 P2025 충돌 복구는 getActiveCareRequest가 담당
   const careRequest = await getActiveCareRequest(ownerId, expireCareRequestIfPastFn);
   if (!careRequest) {
-    return DESIGNATED_REQUEST_STATUS.NO_ACTIVE_REQUEST;
+    return {
+      status: DESIGNATED_REQUEST_STATUS.NO_ACTIVE_REQUEST,
+      designatedRequestId: null,
+    };
   }
 
-  const { designatedCount, hasDesignated, hasQuote } = await findDesignationRelation(
-    careRequest.id,
-    sitterId,
-  );
+  const { designatedCount, hasDesignated, designatedRequestId, hasQuote } =
+    await findDesignationRelation(careRequest.id, sitterId);
 
-  if (hasQuote) return DESIGNATED_REQUEST_STATUS.ALREADY_SENT_QUOTE;
-  if (hasDesignated) return DESIGNATED_REQUEST_STATUS.ALREADY_DESIGNATED;
-  if (designatedCount >= MAX_DESIGNATED_REQUESTS) {
-    return DESIGNATED_REQUEST_STATUS.LIMIT_EXCEEDED;
+  let status: (typeof DESIGNATED_REQUEST_STATUS)[keyof typeof DESIGNATED_REQUEST_STATUS];
+  if (hasQuote) {
+    status = DESIGNATED_REQUEST_STATUS.ALREADY_SENT_QUOTE;
+  } else if (hasDesignated) {
+    status = DESIGNATED_REQUEST_STATUS.ALREADY_DESIGNATED;
+  } else if (designatedCount >= MAX_DESIGNATED_REQUESTS) {
+    status = DESIGNATED_REQUEST_STATUS.LIMIT_EXCEEDED;
+  } else {
+    status = DESIGNATED_REQUEST_STATUS.AVAILABLE;
   }
-  return DESIGNATED_REQUEST_STATUS.AVAILABLE;
+
+  return {
+    status,
+    designatedRequestId: designatedRequestId?.toString() ?? null,
+  };
 }
 
 // 비로그인은 허용, 로그인했다면 OWNER만 조회 가능
@@ -108,6 +119,9 @@ export async function getSitterDetail(
   if (!profile) throw new AppError("SITTER_NOT_FOUND");
 
   const aggregate = (await getSitterAggregates([sitterId])).get(sitterId);
+  const designation = viewer
+    ? await getDesignatedRequestInfo(viewer.id, sitterId, expireCareRequestIfPastFn)
+    : null;
 
   return {
     id: profile.userId.toString(),
@@ -121,8 +135,7 @@ export async function getSitterDetail(
     averageRating: aggregate?.averageRating ?? 0,
     reviewCount: aggregate?.reviewCount ?? 0,
     confirmedQuoteCount: aggregate?.confirmedQuoteCount ?? 0,
-    designatedRequestStatus: viewer
-      ? await getDesignatedRequestStatus(viewer.id, sitterId, expireCareRequestIfPastFn)
-      : null,
+    designatedRequestId: designation?.designatedRequestId ?? null,
+    designatedRequestStatus: designation?.status ?? null,
   };
 }
