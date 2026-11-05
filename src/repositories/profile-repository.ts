@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma.js";
+import type { DbClient } from "../types/db.js";
 import type {
   UpdateOwnerProfileInput,
   CreateSitterProfileInput,
@@ -135,3 +136,15 @@ export const findSitterMyPageByUserId = (userId: bigint) => {
     select: SITTER_MYPAGE_SELECT,
   });
 };
+
+// 팟트너 프로필 행 잠금
+export async function lockSitterProfileByUserId(userId: bigint, db: DbClient = prisma) {
+  const lockedProfiles = await db.$queryRaw<{ id: bigint }[]>`
+    SELECT "id"
+    FROM "SitterProfile"
+    WHERE "userId" = ${userId}
+    FOR UPDATE
+  `;
+
+  return lockedProfiles[0] ?? null;
+}
