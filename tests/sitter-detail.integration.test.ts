@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import type { Gender, Region, ServiceType } from "../src/generated/prisma/enums.js";
+import { expireCareRequestIfPast } from "../src/services/care-request-expiration.js";
 import { getSitterDetail } from "../src/services/sitter-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 import { validateSitterIdParam } from "../src/validators/sitter-validator.js";
@@ -137,6 +138,15 @@ async function addReviews(sitterId: bigint, ratings: number[]) {
 function assertAppError(code: string, statusCode = 400) {
   return (error: unknown) =>
     error instanceof AppError && error.code === code && error.statusCode === statusCode;
+}
+
+// Prisma P2025 충돌 오류 생성
+function createP2025Error() {
+  return Object.assign(new Error("Record not found"), { code: "P2025" });
+}
+
+function assertP2025(error: unknown) {
+  return error instanceof Error && "code" in error && error.code === "P2025";
 }
 
 describe("팟트너 상세 조회", () => {
@@ -288,6 +298,79 @@ describe("팟트너 상세 조회", () => {
       const result = await getSitterDetail(designatedIds[0], { id: ownerId, role: "OWNER" });
 
       assert.equal(result.designatedRequestStatus, "ALREADY_DESIGNATED");
+    });
+
+    describe("만료 처리 중 상태 충돌(P2025)", () => {
+      it("P2025 이후 최초 요청이 취소됐고 활성 요청이 없으면 NO_ACTIVE_REQUEST", async () => {
+        const sitterId = await createSitter({ name: "race-cancel-sitter" });
+        const { ownerId, careRequestId } = await createOwner({ name: "race-cancel-owner" });
+
+        const expireFn: typeof expireCareRequestIfPast = async () => {
+          await prisma.careRequest.update({
+            where: { id: careRequestId! },
+            data: { status: "CANCELED", canceledAt: new Date() },
+          });
+          throw createP2025Error();
+        };
+
+        const result = await getSitterDetail(sitterId, { id: ownerId, role: "OWNER" }, expireFn);
+
+        assert.equal(result.designatedRequestStatus, "NO_ACTIVE_REQUEST");
+        const saved = await prisma.careRequest.findUniqueOrThrow({
+          where: { id: careRequestId! },
+        });
+        assert.equal(saved.status, "CANCELED");
+      });
+
+      it("P2025 이후 다른 유효한 OPEN 요청이 있으면 그 요청 기준으로 판정한다", async () => {
+        const sitterId = await createSitter({ name: "race-new-sitter" });
+        const { ownerId, careRequestId } = await createOwner({ name: "race-new-owner" });
+        let firstCall = true;
+
+        const expireFn: typeof expireCareRequestIfPast = async (request) => {
+          if (firstCall) {
+            firstCall = false;
+            await prisma.careRequest.update({
+              where: { id: careRequestId! },
+              data: { status: "CANCELED", canceledAt: new Date() },
+            });
+            await prisma.careRequest.create({
+              data: {
+                ownerId,
+                serviceType: "SHORT_CARE",
+                startDate: futureDate(7),
+                endDate: futureDate(14),
+                zonecode: "04524",
+                address: "서울특별시 중구 세종대로 110",
+                sido: "서울특별시",
+                sigungu: "중구",
+                region: "SEOUL",
+                status: "OPEN",
+              },
+            });
+            throw createP2025Error();
+          }
+          return expireCareRequestIfPast(request);
+        };
+
+        const result = await getSitterDetail(sitterId, { id: ownerId, role: "OWNER" }, expireFn);
+
+        assert.equal(result.designatedRequestStatus, "AVAILABLE");
+      });
+
+      it("P2025 이후에도 최초 요청이 OPEN이면 원본 오류를 전달한다", async () => {
+        const sitterId = await createSitter({ name: "race-open-sitter" });
+        const { ownerId } = await createOwner({ name: "race-open-owner" });
+
+        const expireFn: typeof expireCareRequestIfPast = async () => {
+          throw createP2025Error();
+        };
+
+        await assert.rejects(
+          () => getSitterDetail(sitterId, { id: ownerId, role: "OWNER" }, expireFn),
+          assertP2025,
+        );
+      });
     });
   });
 

@@ -1,5 +1,4 @@
 import AppError from "../errors/app-error.js";
-import { findOpenCareRequest } from "../repositories/care-request-repository.js";
 import {
   findDesignationRelation,
   findSitterDetailByUserId,
@@ -11,7 +10,8 @@ import {
   type SitterListQuery,
   type SitterViewer,
 } from "../types/sitter.js";
-import { expireCareRequestIfPast } from "./care-request-expiration.js";
+import { getActiveCareRequest } from "./care-request-service.js";
+import type { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 const MAX_DESIGNATED_REQUESTS = 3;
@@ -70,11 +70,14 @@ export async function getSitterList(query: SitterListQuery) {
 }
 
 // 현재 로그인한 팟오너의 활성 돌봄 요청과 해당 팟트너의 관계로 지정 요청 가능 여부 계산
-async function getDesignatedRequestStatus(ownerId: bigint, sitterId: bigint) {
-  const careRequest = await findOpenCareRequest(ownerId);
-
-  // 시작일이 지난 OPEN 요청은 만료 처리 후 활성 요청 없음으로 취급
-  if (!careRequest || (await expireCareRequestIfPast(careRequest))) {
+async function getDesignatedRequestStatus(
+  ownerId: bigint,
+  sitterId: bigint,
+  expireCareRequestIfPastFn?: typeof expireCareRequestIfPast,
+) {
+  // 만료 처리와 P2025 충돌 복구는 getActiveCareRequest가 담당
+  const careRequest = await getActiveCareRequest(ownerId, expireCareRequestIfPastFn);
+  if (!careRequest) {
     return DESIGNATED_REQUEST_STATUS.NO_ACTIVE_REQUEST;
   }
 
@@ -92,7 +95,11 @@ async function getDesignatedRequestStatus(ownerId: bigint, sitterId: bigint) {
 }
 
 // 비로그인은 허용, 로그인했다면 OWNER만 조회 가능
-export async function getSitterDetail(sitterId: bigint, viewer?: SitterViewer) {
+export async function getSitterDetail(
+  sitterId: bigint,
+  viewer?: SitterViewer,
+  expireCareRequestIfPastFn?: typeof expireCareRequestIfPast,
+) {
   if (viewer && viewer.role !== "OWNER") {
     throw new AppError("SITTER_PROFILE_ACCESS_FORBIDDEN");
   }
@@ -114,6 +121,8 @@ export async function getSitterDetail(sitterId: bigint, viewer?: SitterViewer) {
     averageRating: aggregate?.averageRating ?? 0,
     reviewCount: aggregate?.reviewCount ?? 0,
     confirmedQuoteCount: aggregate?.confirmedQuoteCount ?? 0,
-    designatedRequestStatus: viewer ? await getDesignatedRequestStatus(viewer.id, sitterId) : null,
+    designatedRequestStatus: viewer
+      ? await getDesignatedRequestStatus(viewer.id, sitterId, expireCareRequestIfPastFn)
+      : null,
   };
 }
