@@ -24,4 +24,11 @@ export const env = {
   get jwtRefreshSecret(): string {
     return requireEnv("JWT_REFRESH_SECRET");
   },
+  get profileImageS3Bucket(): string {
+    return requireEnv("PROFILE_IMAGE_S3_BUCKET");
+  },
+  get profileImageCloudfrontUrl(): string {
+    return requireEnv("PROFILE_IMAGE_CLOUDFRONT_URL");
+  },
+  awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
 };
