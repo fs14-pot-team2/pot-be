@@ -17,6 +17,36 @@ POT (Plant On Trust)은 식물 돌봄이 필요한 팟오너와 방문 돌봄을
 
 인스턴스가 바뀌어 공인 IP가 달라지면 배포 또는 정기 갱신 시 DuckDNS 주소를 다시 맞춥니다. 인증서 발급에 필요한 도메인과 환경 속성이 누락되면 배포가 실패할 수 있습니다. Elastic Beanstalk 기본 주소의 HTTP `/health`는 상태 확인용으로 유지됩니다.
 
+## RDS TLS 연결 설정
+
+Elastic Beanstalk의 애플리케이션 배포 및 환경 속성 변경 시 서울 리전의 AWS RDS CA 인증서 번들을 `/etc/pot/rds-ca.pem`에 자동 설치합니다. 설치 디렉터리는 `0755`, 인증서 파일은 `0644` 권한으로 생성되어 애플리케이션 실행 사용자인 `webapp`이 읽을 수 있습니다. 인증서 다운로드 또는 PEM 형식 검증에 실패하면 암호화되지 않거나 검증되지 않은 DB 연결로 실행되지 않도록 배포가 실패합니다.
+
+개발 RDS에 연결하는 Elastic Beanstalk 환경 속성의 `DATABASE_URL`에는 기존 사용자명, 비밀번호, 호스트, 데이터베이스명과 기존 쿼리 파라미터를 유지한 채 다음 옵션을 추가합니다.
+
+```text
+sslmode=verify-full&sslrootcert=/etc/pot/rds-ca.pem
+```
+
+예를 들어 기존 URL에 `?schema=public`이 있다면 다음과 같이 `&`로 이어 붙입니다. 실제 사용자명, 비밀번호와 RDS 주소는 Git, PR, 채팅에 기록하지 않습니다.
+
+```text
+postgresql://<사용자명>:<비밀번호>@<RDS-엔드포인트>:5432/pot_dev?schema=public&sslmode=verify-full&sslrootcert=/etc/pot/rds-ca.pem
+```
+
+`@prisma/adapter-pg`에 전달되는 `pg` 연결 문자열 파서는 `sslrootcert`의 인증서를 CA로 읽고, `sslmode=verify-full`에서 인증서 체인과 RDS 호스트 이름을 모두 검증합니다. 별도의 TLS 우회 옵션이나 코드 설정은 사용하지 않습니다. TLS 파라미터가 없는 로컬 및 CI의 `DATABASE_URL`은 기존 방식으로 동작합니다.
+
+### 안전한 적용 순서
+
+CA 파일이 없는 상태에서 `DATABASE_URL`만 먼저 변경하면 애플리케이션이 시작되지 않을 수 있으므로 다음 순서를 지킵니다.
+
+1. 이 배포 훅이 포함된 코드를 먼저 `develop`에 배포하되, 기존 `DATABASE_URL`은 변경하지 않습니다.
+2. 배포가 성공하면 인스턴스에서 `test -r /etc/pot/rds-ca.pem`을 실행해 인증서 파일을 읽을 수 있는지 확인합니다.
+3. `openssl crl2pkcs7 -nocrl -certfile /etc/pot/rds-ca.pem -out /dev/null`을 실행해 인증서 번들이 정상인지 확인합니다.
+4. Elastic Beanstalk 콘솔의 **구성 → 업데이트, 모니터링 및 로깅 → 환경 속성**에서 기존 `DATABASE_URL`의 다른 값을 보존한 채 `sslmode=verify-full`과 `sslrootcert=/etc/pot/rds-ca.pem`을 추가합니다.
+5. 환경 속성 업데이트가 완료되고 환경 상태가 정상으로 돌아오면 `/health`와 로그인 API를 순서대로 확인합니다.
+
+환경 속성 변경 배포에서도 동일한 CA 설치 훅이 먼저 실행되므로 파일이 없거나 손상된 상태에서는 배포가 중단됩니다. 새 인스턴스로 교체되는 애플리케이션 배포에서도 인증서를 다시 설치합니다.
+
 ## 시작하기
 
 Node.js **24.16.0**, npm **11.x**를 사용합니다. 저장소 루트에서 실행하세요.
