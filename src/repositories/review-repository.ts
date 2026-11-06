@@ -1,3 +1,4 @@
+import type { DbClient } from "../types/db.js";
 import { prisma } from "../config/prisma.js";
 
 // 팟트너 프로필 존재 여부 (상세 조회와 같은 SITTER_NOT_FOUND 기준)
@@ -34,3 +35,39 @@ export const groupRatingDistribution = (sitterId: bigint) => {
     _count: { _all: true },
   });
 };
+
+// 리뷰 작성 가능 여부 판단용 돌봄 요청 조회 (확정된 팟트너 포함)
+export function findCareRequestForReview(careRequestId: bigint, db: DbClient = prisma) {
+  return db.careRequest.findUnique({
+    where: { id: careRequestId },
+    select: {
+      id: true,
+      ownerId: true,
+      status: true,
+      endDate: true,
+      confirmedQuote: { select: { sitterId: true } },
+    },
+  });
+}
+
+// 돌봄 요청당 리뷰 존재 여부
+export function findReviewByCareRequestId(careRequestId: bigint, db: DbClient = prisma) {
+  return db.review.findUnique({
+    where: { careRequestId },
+    select: { id: true },
+  });
+}
+
+// 리뷰 생성
+export function insertReview(
+  data: {
+    careRequestId: bigint;
+    ownerId: bigint;
+    sitterId: bigint;
+    rating: number;
+    content: string;
+  },
+  db: DbClient = prisma,
+) {
+  return db.review.create({ data });
+}
