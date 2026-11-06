@@ -29,6 +29,6 @@ app.use("/users", userRoutes);
 
 app.use(sitterRouter);
 
-app.use("/images", imageRouter);
+app.use("/profile-images", imageRouter);
 
 app.use(errorMiddleware);

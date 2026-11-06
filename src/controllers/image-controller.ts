@@ -10,8 +10,11 @@ export async function issueProfileImageUrlController(
 ) {
   try {
     const input = validatePresignedUrlRequest(req.body);
-    const result = await imageService.createProfileImagePresignedUrl(req.user!.id, input);
-    res.status(200).json(result);
+    const result = await imageService.createProfileImagePresignedUrl(
+      { id: req.user!.id, role: req.user!.role },
+      input,
+    );
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }

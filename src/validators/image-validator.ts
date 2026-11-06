@@ -27,7 +27,7 @@ export function validatePresignedUrlRequest(body: unknown): PresignedUrlInput {
   const { contentType, fileSize } = body as Record<string, unknown>;
 
   if (!isImageContentType(contentType)) {
-    throw new AppError("INVALID_IMAGE_TYPE");
+    throw new AppError("INVALID_PROFILE_IMAGE");
   }
   if (
     typeof fileSize !== "number" ||
@@ -35,7 +35,7 @@ export function validatePresignedUrlRequest(body: unknown): PresignedUrlInput {
     fileSize <= 0 ||
     fileSize > MAX_IMAGE_SIZE
   ) {
-    throw new AppError("INVALID_IMAGE_SIZE");
+    throw new AppError("INVALID_PROFILE_IMAGE");
   }
 
   return { contentType, fileSize };

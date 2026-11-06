@@ -5,4 +5,4 @@ import { authenticate } from "../middlewares/auth-middleware.js";
 
 export const imageRouter = Router();
 
-imageRouter.post("/profile/presigned-url", authenticate, issueProfileImageUrlController);
+imageRouter.post("/presigned-url", authenticate, issueProfileImageUrlController);

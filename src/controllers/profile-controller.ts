@@ -21,7 +21,7 @@ export async function updateOwnerProfileController(
   next: NextFunction,
 ) {
   try {
-    const input = validateUpdateOwnerProfile(req.body);
+    const input = validateUpdateOwnerProfile(req.body, { id: req.user!.id, role: req.user!.role });
     const profile = await profileService.updateOwnerProfile(req.user!.id, input);
     res.status(200).json(profile);
   } catch (error) {
@@ -44,7 +44,7 @@ export async function updateSitterProfileController(
   next: NextFunction,
 ) {
   try {
-    const input = validateUpdateSitterProfile(req.body);
+    const input = validateUpdateSitterProfile(req.body, { id: req.user!.id, role: req.user!.role });
     const profile = await profileService.updateSitterProfile(req.user!.id, input);
     res.status(200).json(profile);
   } catch (error) {
@@ -58,7 +58,7 @@ export async function createSitterProfileController(
   next: NextFunction,
 ) {
   try {
-    const input = validateCreateSitterProfile(req.body);
+    const input = validateCreateSitterProfile(req.body, { id: req.user!.id, role: req.user!.role });
     const profile = await profileService.createSitterProfile(req.user!.id, input);
     res.status(201).json(profile);
   } catch (error) {
