@@ -5,6 +5,30 @@ export interface CreateQuoteInput {
   comment: string;
 }
 
+export type UpdateQuoteInput = Partial<CreateQuoteInput>;
+
+function validateQuotePrice(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1000 || value >= 100000000) {
+    throw new AppError("INVALID_QUOTE_PRICE");
+  }
+
+  return value;
+}
+
+function validateQuoteComment(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new AppError("INVALID_QUOTE_COMMENT");
+  }
+
+  const commentLength = value.replace(/\s/g, "").length;
+
+  if (commentLength < 10 || commentLength > 1000) {
+    throw new AppError("INVALID_QUOTE_COMMENT");
+  }
+
+  return value;
+}
+
 // 견적 생성 입력값 검증
 export function validateCreateQuote(body: unknown): CreateQuoteInput {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -17,19 +41,27 @@ export function validateCreateQuote(body: unknown): CreateQuoteInput {
     throw new AppError("INVALID_REQUEST");
   }
 
-  if (typeof price !== "number" || !Number.isInteger(price) || price < 1000 || price >= 100000000) {
-    throw new AppError("INVALID_QUOTE_PRICE");
+  return {
+    price: validateQuotePrice(price),
+    comment: validateQuoteComment(comment),
+  };
+}
+
+// 견적 수정 입력값 검증
+export function validateUpdateQuote(body: unknown): UpdateQuoteInput {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new AppError("INVALID_REQUEST");
   }
 
-  if (typeof comment !== "string") {
-    throw new AppError("INVALID_QUOTE_COMMENT");
+  const quoteData: UpdateQuoteInput = {};
+
+  if ("price" in body) {
+    quoteData.price = validateQuotePrice(body.price);
   }
 
-  const commentLength = comment.replace(/\s/g, "").length;
-
-  if (commentLength < 10 || commentLength > 1000) {
-    throw new AppError("INVALID_QUOTE_COMMENT");
+  if ("comment" in body) {
+    quoteData.comment = validateQuoteComment(body.comment);
   }
 
-  return { price, comment };
+  return quoteData;
 }
