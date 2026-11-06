@@ -106,6 +106,16 @@ export const ERROR_DEFINITIONS = {
     message: "프로필 이미지가 올바르지 않습니다.",
     statusCode: 400,
   },
+  INVALID_IMAGE_TYPE: {
+    code: "INVALID_IMAGE_TYPE",
+    message: "jpg, jpeg, png, webp 형식의 이미지만 업로드할 수 있습니다.",
+    statusCode: 400,
+  },
+  INVALID_IMAGE_SIZE: {
+    code: "INVALID_IMAGE_SIZE",
+    message: "이미지 크기는 5MB 이하여야 합니다.",
+    statusCode: 400,
+  },
   INVALID_PROFILE_INTRODUCTION: {
     code: "INVALID_PROFILE_INTRODUCTION",
     message: "한 줄 소개가 올바르지 않습니다.",
