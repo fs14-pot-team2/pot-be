@@ -1,4 +1,5 @@
 import AppError from "../errors/app-error.js";
+import { validatePagination } from "./pagination-validator.js";
 
 export interface CreateQuoteInput {
   price: number;
@@ -64,4 +65,18 @@ export function validateUpdateQuote(body: unknown): UpdateQuoteInput {
   }
 
   return quoteData;
+}
+
+// 보낸 견적 목록 조회 Query Parameter 검증
+export function validateSentQuotesQuery(page: unknown, pageSize: unknown, confirmedOnly: unknown) {
+  const pagination = validatePagination(page, pageSize);
+
+  if (confirmedOnly !== undefined && confirmedOnly !== "true" && confirmedOnly !== "false") {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  return {
+    ...pagination,
+    confirmedOnly: confirmedOnly === "true",
+  };
 }

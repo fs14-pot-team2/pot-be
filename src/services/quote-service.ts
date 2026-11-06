@@ -1,7 +1,9 @@
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
+import { CareRequestStatus } from "../generated/prisma/enums.js";
 import {
   findCareRequest,
+  findSitterProfileIdByUserId,
   findSitterProfileWithRegions,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
@@ -12,8 +14,10 @@ import {
 } from "../repositories/designated-request-repository.js";
 import {
   countGeneralQuotesByCareRequest,
+  countSentQuotes,
   findQuote,
   findQuoteDetail,
+  findSentQuotes,
   insertQuote,
   updateQuote,
 } from "../repositories/quote-repository.js";
@@ -320,5 +324,94 @@ export async function getQuoteDetail(quoteId: bigint, user: AuthUser) {
       reviewCount: sitterAggregate?.reviewCount ?? 0,
       confirmedQuoteCount: sitterAggregate?.confirmedQuoteCount ?? 0,
     },
+  };
+}
+
+// 팟트너가 보낸 견적 목록 조회
+export async function getSentQuotes(
+  sitterId: bigint,
+  page: number,
+  pageSize: number,
+  confirmedOnly: boolean,
+) {
+  const sitterProfile = await findSitterProfileIdByUserId(sitterId);
+
+  if (!sitterProfile) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  const skip = (page - 1) * pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const openStatuses = [CareRequestStatus.OPEN];
+  const nonOpenStatuses = [CareRequestStatus.MATCHED, CareRequestStatus.EXPIRED];
+
+  const [openCount, nonOpenCount] = await Promise.all([
+    countSentQuotes(sitterId, openStatuses, confirmedOnly),
+    countSentQuotes(sitterId, nonOpenStatuses, confirmedOnly),
+  ]);
+
+  const totalCount = openCount + nonOpenCount;
+
+  if (!Number.isSafeInteger(totalCount)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  // skip <= openCount ? skip : openCount
+  const openSkip = Math.min(skip, openCount);
+
+  // pageSize <= openCount - openSkip ? pageSize : openCount - openSkip
+  const openTake = Math.min(pageSize, openCount - openSkip);
+
+  // skip - openCount >= 0 ? skip - openCount : 0
+  const nonOpenSkip = Math.max(0, skip - openCount);
+
+  // nonOpenCount - nonOpenSkip >= 0 ? nonOpenCount - nonOpenSkip : 0
+  // pageSize - openTake <= (위에서 선택한 값) ? pageSize - openTake : (위에서 선택한 값)
+  const nonOpenTake = Math.min(pageSize - openTake, Math.max(0, nonOpenCount - nonOpenSkip));
+
+  const [openQuotes, nonOpenQuotes] = await Promise.all([
+    openTake > 0
+      ? findSentQuotes(sitterId, openStatuses, confirmedOnly, openSkip, openTake)
+      : Promise.resolve([]),
+    nonOpenTake > 0
+      ? findSentQuotes(sitterId, nonOpenStatuses, confirmedOnly, nonOpenSkip, nonOpenTake)
+      : Promise.resolve([]),
+  ]);
+
+  const items = [...openQuotes, ...nonOpenQuotes].map((quote) => ({
+    quote: {
+      id: quote.id,
+      price: quote.price,
+      createdAt: quote.createdAt,
+    },
+    designatedRequestId: quote.careRequest.designatedRequests[0]?.id ?? null,
+    careRequest: {
+      id: quote.careRequest.id,
+      status: quote.careRequest.status,
+      serviceType: quote.careRequest.serviceType,
+      startDate: serializeDate(quote.careRequest.startDate),
+      endDate: serializeDate(quote.careRequest.endDate),
+      sido: quote.careRequest.sido,
+      sigungu: quote.careRequest.sigungu,
+      bname: quote.careRequest.bname,
+      confirmedQuoteId: quote.careRequest.confirmedQuoteId,
+    },
+    owner: {
+      nickname: quote.careRequest.owner.nickname,
+    },
+  }));
+
+  return {
+    items,
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
   };
 }
