@@ -5,6 +5,8 @@ import { env } from "../src/config/env.js";
 import AppError from "../src/errors/app-error.js";
 import { validateProfileImageUrl } from "../src/validators/profile-validator.js";
 
+process.env.PROFILE_IMAGE_CLOUDFRONT_URL ??= "https://test.cloudfront.net";
+
 const base = env.profileImageCloudfrontUrl.replace(/\/+$/, "");
 const UUID = "3f2a9c1e-7b4d-4e8a-9d21-5c6b8a0e1f34";
 const sitter = { id: 2n, role: "SITTER" as const };
