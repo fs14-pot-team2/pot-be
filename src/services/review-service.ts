@@ -7,12 +7,18 @@ import {
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 export async function getSitterReviews(sitterId: bigint, page: number, pageSize: number) {
+  const skip = (page - 1) * pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
   if (!(await existsSitterProfileByUserId(sitterId))) {
     throw new AppError("SITTER_NOT_FOUND");
   }
 
   const [reviews, distributionRows, aggregates] = await Promise.all([
-    findReviewsBySitterId(sitterId, (page - 1) * pageSize, pageSize),
+    findReviewsBySitterId(sitterId, skip, pageSize),
     groupRatingDistribution(sitterId),
     getSitterAggregates([sitterId]),
   ]);
