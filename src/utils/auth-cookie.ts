@@ -5,7 +5,7 @@ import { REFRESH_TOKEN_MAX_AGE_MS } from "./jwt.js";
 
 const REFRESH_COOKIE_NAME = "refreshToken";
 
-// TODO: FE·BE 배포 구조 확정 후 sameSite 결정 (발급/삭제 옵션은 항상 동일해야 함)
+// FE에서 Next.js rewrites 프록시(same-origin)로 호출하므로 sameSite는 lax 유지 (발급/삭제 옵션은 항상 동일해야 함)
 const baseOptions = () => ({
   httpOnly: true,
   secure: env.isProduction,
