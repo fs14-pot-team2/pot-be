@@ -56,3 +56,60 @@ export function updateQuote(
     data: quoteData,
   });
 }
+
+// 견적 상세 조회 및 접근 권한 검증에 필요한 관계 데이터 조회
+export function findQuoteDetail(quoteId: bigint, db: DbClient = prisma) {
+  return db.quote.findUnique({
+    where: { id: quoteId },
+    select: {
+      id: true,
+      sitterId: true,
+      price: true,
+      comment: true,
+      createdAt: true,
+      careRequest: {
+        select: {
+          id: true,
+          ownerId: true,
+          status: true,
+          confirmedQuoteId: true,
+          createdAt: true,
+          serviceType: true,
+          startDate: true,
+          endDate: true,
+          region: true,
+          sido: true,
+          sigungu: true,
+          bname: true,
+          zonecode: true,
+          address: true,
+          detailAddress: true,
+          owner: {
+            select: {
+              nickname: true,
+            },
+          },
+          designatedRequests: {
+            select: {
+              id: true,
+              sitterId: true,
+            },
+          },
+        },
+      },
+      sitter: {
+        select: {
+          id: true,
+          nickname: true,
+          sitterProfile: {
+            select: {
+              profileImageUrl: true,
+              gender: true,
+              shortIntroduction: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}

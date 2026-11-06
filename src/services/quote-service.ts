@@ -10,18 +10,22 @@ import {
   findQuoteByCareRequestAndSitter,
   findRejectedRequestByDesignatedRequestId,
 } from "../repositories/designated-request-repository.js";
-import { findIgnoredRequestByCareRequestAndSitter } from "../repositories/ignored-request-repository.js";
-import { lockSitterProfileByUserId } from "../repositories/profile-repository.js";
 import {
   countGeneralQuotesByCareRequest,
   findQuote,
+  findQuoteDetail,
   insertQuote,
   updateQuote,
 } from "../repositories/quote-repository.js";
+import { findIgnoredRequestByCareRequestAndSitter } from "../repositories/ignored-request-repository.js";
+import { lockSitterProfileByUserId } from "../repositories/profile-repository.js";
 import type { TransactionRunner } from "../types/db.js";
+import type { AuthUser } from "../types/auth.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { serializeDate } from "../utils/serialize-date.js";
 import type { CreateQuoteInput } from "../validators/quote-validator.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
+import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 // 팟트너의 돌봄 요청에 대한 견적 생성
 export async function createQuote(
@@ -209,4 +213,112 @@ export async function updateQuoteService(
 
     throw error;
   }
+}
+
+/*
+ * 견적 조회 및 주소 공개 조건
+ * - OPEN: 요청자 본인(전체 주소), 서비스 지역에 해당하거나 지정 요청을 받은 팟트너(일부 주소)
+ * - MATCHED: 요청자 본인(전체 주소), 해당 요청 견적 제출자(최종 매칭 시 전체 주소, 미매칭 시 일부 주소)
+ * - EXPIRED: 요청자 본인(전체 주소), 해당 요청 견적 제출자(일부 주소)
+ * - CANCELED: 모든 사용자 조회 불가
+ * - 전체 주소: sido, sigungu, bname, zonecode, address, detailAddress
+ * - 일부 주소: sido, sigungu, bname만 공개 / zonecode, address, detailAddress는 null
+ */
+// 견적 상세 조회 및 접근 권한에 따른 주소 공개
+export async function getQuoteDetail(quoteId: bigint, user: AuthUser) {
+  const quote = await findQuoteDetail(quoteId);
+
+  if (!quote) {
+    throw new AppError("QUOTE_NOT_FOUND");
+  }
+
+  const careRequest = quote.careRequest;
+
+  if (careRequest.status === "CANCELED") {
+    throw new AppError("QUOTE_ACCESS_FORBIDDEN");
+  }
+
+  let canViewFullAddress = false;
+
+  if (user.role === "OWNER") {
+    if (careRequest.ownerId !== user.id) {
+      throw new AppError("QUOTE_ACCESS_FORBIDDEN");
+    }
+
+    canViewFullAddress = true;
+  } else {
+    if (careRequest.status === "OPEN") {
+      const isDesignatedSitter = careRequest.designatedRequests.some(
+        (designatedRequest) => designatedRequest.sitterId === user.id,
+      );
+
+      const sitterProfile = await findSitterProfileWithRegions(user.id);
+      const isServiceRegion =
+        sitterProfile?.sitterServiceRegions.some(({ region }) => region === careRequest.region) ??
+        false;
+
+      if (!isDesignatedSitter && !isServiceRegion) {
+        throw new AppError("QUOTE_ACCESS_FORBIDDEN");
+      }
+    } else {
+      if (quote.sitterId !== user.id) {
+        throw new AppError("QUOTE_ACCESS_FORBIDDEN");
+      }
+
+      canViewFullAddress =
+        careRequest.status === "MATCHED" && careRequest.confirmedQuoteId === quote.id;
+    }
+  }
+
+  const designatedRequestId =
+    careRequest.designatedRequests.find(
+      (designatedRequest) => designatedRequest.sitterId === quote.sitterId,
+    )?.id ?? null;
+
+  const sitterProfile = quote.sitter.sitterProfile;
+
+  if (!sitterProfile) {
+    throw new AppError("SITTER_PROFILE_INCONSISTENT");
+  }
+
+  const sitterAggregates = await getSitterAggregates([quote.sitterId]);
+  const sitterAggregate = sitterAggregates.get(quote.sitterId);
+
+  return {
+    quote: {
+      id: quote.id,
+      price: quote.price,
+      comment: quote.comment,
+      createdAt: quote.createdAt,
+    },
+    designatedRequestId,
+    careRequest: {
+      id: careRequest.id,
+      status: careRequest.status,
+      confirmedQuoteId: careRequest.confirmedQuoteId,
+      createdAt: careRequest.createdAt,
+      serviceType: careRequest.serviceType,
+      startDate: serializeDate(careRequest.startDate),
+      endDate: serializeDate(careRequest.endDate),
+      sido: careRequest.sido,
+      sigungu: careRequest.sigungu,
+      bname: careRequest.bname,
+      zonecode: canViewFullAddress ? careRequest.zonecode : null,
+      address: canViewFullAddress ? careRequest.address : null,
+      detailAddress: canViewFullAddress ? careRequest.detailAddress : null,
+    },
+    owner: {
+      nickname: careRequest.owner.nickname,
+    },
+    sitter: {
+      id: quote.sitter.id,
+      nickname: quote.sitter.nickname,
+      profileImageUrl: sitterProfile.profileImageUrl,
+      gender: sitterProfile.gender,
+      shortIntroduction: sitterProfile.shortIntroduction,
+      averageRating: sitterAggregate?.averageRating ?? 0,
+      reviewCount: sitterAggregate?.reviewCount ?? 0,
+      confirmedQuoteCount: sitterAggregate?.confirmedQuoteCount ?? 0,
+    },
+  };
 }

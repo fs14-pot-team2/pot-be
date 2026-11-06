@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import AppError from "../errors/app-error.js";
-import { createQuote, updateQuoteService } from "../services/quote-service.js";
+import { createQuote, getQuoteDetail, updateQuoteService } from "../services/quote-service.js";
 import { validateCreateQuote, validateUpdateQuote } from "../validators/quote-validator.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 
@@ -61,4 +61,21 @@ export async function updateQuoteController(req: Request, res: Response) {
   };
 
   res.status(200).json(serializeBigInt(quoteResponse));
+}
+
+// 팟오너·팟트너의 견적 상세 조회
+export async function getQuoteDetailController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const quoteId = parseBigId(req.params.quoteId);
+
+  if (quoteId === null) {
+    throw new AppError("INVALID_ID");
+  }
+
+  const quoteDetail = await getQuoteDetail(quoteId, req.user);
+
+  res.status(200).json(serializeBigInt(quoteDetail));
 }

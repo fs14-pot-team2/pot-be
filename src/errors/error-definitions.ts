@@ -151,6 +151,11 @@ export const ERROR_DEFINITIONS = {
     message: "이미 등록된 서비스 지역입니다.",
     statusCode: 409,
   },
+  SITTER_PROFILE_INCONSISTENT: {
+    code: "SITTER_PROFILE_INCONSISTENT",
+    message: "팟트너 프로필 정보를 확인할 수 없습니다.",
+    statusCode: 500,
+  },
 
   // 팟트너 조회
   SITTER_NOT_FOUND: {
