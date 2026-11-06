@@ -34,7 +34,7 @@ function assertAppError(code: string, statusCode = 409) {
 }
 
 // 각 테스트에서 사용할 독립적인 팟오너, 돌봄 요청, 팟트너 및 견적 생성
-async function createTestRequest() {
+async function createTestRequest(startDate = futureDate(7)) {
   const uniqueId = randomUUID();
 
   const owner = await prisma.user.create({
@@ -67,7 +67,7 @@ async function createTestRequest() {
     data: {
       ownerId: owner.id,
       serviceType: "SHORT_CARE",
-      startDate: futureDate(7),
+      startDate,
       endDate: futureDate(14),
       zonecode: "04524",
       address: "서울특별시 중구 세종대로 110",
@@ -123,6 +123,31 @@ describe("견적 수정", () => {
 
       const savedQuote = await prisma.quote.findUniqueOrThrow({ where: { id: quoteId } });
 
+      assert.equal(savedQuote.price, originalQuote.price);
+      assert.equal(savedQuote.comment, originalQuote.comment);
+      assert.equal(savedQuote.updatedAt.getTime(), originalQuote.updatedAt.getTime());
+    });
+
+    // 시작일이 지난 요청은 EXPIRED 상태 변경을 커밋하고 견적 수정을 차단하는지 확인
+    it("시작일이 지난 요청은 만료 처리 후 견적 수정을 차단한다", async () => {
+      const { sitterId, careRequestId, quoteId, originalQuote } = await createTestRequest(
+        futureDate(-1),
+      );
+
+      await assert.rejects(
+        updateQuoteService(sitterId, quoteId, { price: 25000 }),
+        assertAppError("QUOTE_EDIT_NOT_ALLOWED"),
+      );
+
+      const savedRequest = await prisma.careRequest.findUniqueOrThrow({
+        where: { id: careRequestId },
+      });
+
+      const savedQuote = await prisma.quote.findUniqueOrThrow({
+        where: { id: quoteId },
+      });
+
+      assert.equal(savedRequest.status, "EXPIRED");
       assert.equal(savedQuote.price, originalQuote.price);
       assert.equal(savedQuote.comment, originalQuote.comment);
       assert.equal(savedQuote.updatedAt.getTime(), originalQuote.updatedAt.getTime());
