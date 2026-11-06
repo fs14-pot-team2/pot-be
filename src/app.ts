@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth-routes.js";
 import { profileRouter } from "./routes/profile-routes.js";
 import userRoutes from "./routes/user-routes.js";
 import { sitterRouter } from "./routes/sitter-routes.js";
+import { imageRouter } from "./routes/image-routes.js";
 import { quoteRouter } from "./routes/quote-routes.js";
 import { errorMiddleware } from "./middlewares/error-middleware.js";
 
@@ -26,5 +27,7 @@ app.use("/auth", authRoutes);
 app.use(profileRouter);
 app.use("/users", userRoutes);
 app.use(sitterRouter);
+
+app.use("/profile-images", imageRouter);
 
 app.use(errorMiddleware);

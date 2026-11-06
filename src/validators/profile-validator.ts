@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import AppError from "../errors/app-error.js";
 import { Gender, Region, ServiceType } from "../generated/prisma/enums.js";
 import type {
@@ -5,6 +6,7 @@ import type {
   CreateSitterProfileInput,
   UpdateSitterProfileInput,
 } from "../types/profile.js";
+import { profileImageKeyPrefix, type ProfileImageRole } from "../utils/profile-image.js";
 
 const MAX_SERVICE_TYPES = 2;
 const MAX_PROFILE_IMAGE_URL_LENGTH = 2048;
@@ -12,6 +14,14 @@ const MAX_PROFILE_IMAGE_URL_LENGTH = 2048;
 const SHORT_INTRODUCTION_MAX = 18;
 const DESCRIPTION_MAX = 1000;
 const MAX_SERVICE_REGIONS = 17;
+
+export interface ProfileImageOwner {
+  id: bigint;
+  role: ProfileImageRole;
+}
+
+// 발급 시 randomUUID().확장자 형태
+const PROFILE_IMAGE_FILE_PATTERN = /^[0-9a-f-]{36}\.(jpg|png|webp)$/;
 
 function isServiceType(value: unknown): value is ServiceType {
   return typeof value === "string" && (Object.values(ServiceType) as string[]).includes(value);
@@ -25,19 +35,31 @@ function countWithoutSpace(value: string) {
   return value.replace(/\s/g, "").length;
 }
 
-export function validateProfileImageUrl(value: unknown): string | null {
+export function validateProfileImageUrl(value: unknown, owner: ProfileImageOwner): string | null {
   if (value === null) {
     return null;
   }
   if (typeof value !== "string" || value.length > MAX_PROFILE_IMAGE_URL_LENGTH) {
     throw new AppError("INVALID_PROFILE_IMAGE");
   }
+
+  let url: URL;
   try {
-    const { protocol } = new URL(value);
-    if (protocol !== "http:" && protocol !== "https:") {
-      throw new AppError("INVALID_PROFILE_IMAGE");
-    }
+    url = new URL(value);
   } catch {
+    throw new AppError("INVALID_PROFILE_IMAGE");
+  }
+
+  const base = new URL(env.profileImageCloudfrontUrl);
+  const prefix = `/${profileImageKeyPrefix(owner.role, owner.id)}`;
+  const fileName = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : "";
+
+  if (
+    url.origin !== base.origin ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    !PROFILE_IMAGE_FILE_PATTERN.test(fileName)
+  ) {
     throw new AppError("INVALID_PROFILE_IMAGE");
   }
   return value;
@@ -67,7 +89,10 @@ export function validateRegion(value: unknown): Region | null {
   return value;
 }
 
-export function validateUpdateOwnerProfile(body: unknown): UpdateOwnerProfileInput {
+export function validateUpdateOwnerProfile(
+  body: unknown,
+  owner: ProfileImageOwner,
+): UpdateOwnerProfileInput {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new AppError("INVALID_REQUEST");
   }
@@ -75,7 +100,7 @@ export function validateUpdateOwnerProfile(body: unknown): UpdateOwnerProfileInp
   const input: UpdateOwnerProfileInput = {};
 
   if ("profileImageUrl" in body) {
-    input.profileImageUrl = validateProfileImageUrl(body.profileImageUrl);
+    input.profileImageUrl = validateProfileImageUrl(body.profileImageUrl, owner);
   }
   if ("preferredServiceTypes" in body) {
     input.preferredServiceTypes = validateServiceTypes(body.preferredServiceTypes);
@@ -144,7 +169,10 @@ export function validateServiceRegions(value: unknown): Region[] {
   return value;
 }
 
-export function validateUpdateSitterProfile(body: unknown): UpdateSitterProfileInput {
+export function validateUpdateSitterProfile(
+  body: unknown,
+  owner: ProfileImageOwner,
+): UpdateSitterProfileInput {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new AppError("INVALID_REQUEST");
   }
@@ -152,7 +180,7 @@ export function validateUpdateSitterProfile(body: unknown): UpdateSitterProfileI
   const input: UpdateSitterProfileInput = {};
 
   if ("profileImageUrl" in body) {
-    input.profileImageUrl = validateProfileImageUrl(body.profileImageUrl);
+    input.profileImageUrl = validateProfileImageUrl(body.profileImageUrl, owner);
   }
   if ("gender" in body) {
     input.gender = validateGender(body.gender);
@@ -173,7 +201,10 @@ export function validateUpdateSitterProfile(body: unknown): UpdateSitterProfileI
   return input;
 }
 
-export function validateCreateSitterProfile(body: unknown): CreateSitterProfileInput {
+export function validateCreateSitterProfile(
+  body: unknown,
+  owner: ProfileImageOwner,
+): CreateSitterProfileInput {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new AppError("INVALID_REQUEST");
   }
@@ -183,7 +214,7 @@ export function validateCreateSitterProfile(body: unknown): CreateSitterProfileI
 
   return {
     profileImageUrl:
-      "profileImageUrl" in data ? validateProfileImageUrl(data.profileImageUrl) : null,
+      "profileImageUrl" in data ? validateProfileImageUrl(data.profileImageUrl, owner) : null,
     description: "description" in data ? validateDescription(data.description) : null,
     gender: validateGender(data.gender),
     shortIntroduction: validateShortIntroduction(data.shortIntroduction),
