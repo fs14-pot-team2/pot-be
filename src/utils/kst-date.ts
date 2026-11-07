@@ -26,3 +26,9 @@ export function getTodayInKst(): string {
 
   return `${year}-${month}-${day}`;
 }
+
+// 날짜 전용 값(@db.Date)이 KST 기준 오늘보다 과거인지 판단
+// endDate 다음 날 00:00 KST 이후 = endDate < 오늘(KST)
+export function isBeforeTodayInKst(dateOnly: Date): boolean {
+  return dateOnly.toISOString().slice(0, 10) < getTodayInKst();
+}
