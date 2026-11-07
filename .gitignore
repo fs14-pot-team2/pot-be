@@ -151,5 +151,9 @@ vite.config.ts.timestamp-*
 # Prisma generated client
 src/generated/prisma/
 
+# Lambda packaging output
+.lambda-build/
+artifacts/lambda/
+
 # macOS
 .DS_Store
