@@ -1,6 +1,8 @@
 import AppError from "../errors/app-error.js";
 import { CareRequestStatus } from "../generated/prisma/enums.js";
 import {
+  countReviewsByOwnerId,
+  findReviewsByOwnerId,
   countWritableCareRequests,
   existsSitterProfileByUserId,
   findCareRequestForReview,
@@ -149,6 +151,52 @@ export async function getWritableReviews(ownerId: bigint, page: number, pageSize
         },
         confirmedQuote: {
           id: quote.id.toString(),
+          type: quote.type,
+          price: quote.price,
+        },
+        sitter: {
+          id: quote.sitter.id.toString(),
+          nickname: quote.sitter.nickname,
+          profileImageUrl: quote.sitter.sitterProfile?.profileImageUrl ?? null,
+        },
+      };
+    }),
+    page,
+    pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
+}
+
+export async function getMyReviews(ownerId: bigint, page: number, pageSize: number) {
+  const skip = (page - 1) * pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const [reviews, totalCount] = await Promise.all([
+    findReviewsByOwnerId(ownerId, skip, pageSize),
+    countReviewsByOwnerId(ownerId),
+  ]);
+
+  return {
+    items: reviews.map((review) => {
+      // 리뷰는 확정 견적이 있는 요청에만 작성되므로 항상 존재
+      const quote = review.careRequest.confirmedQuote!;
+      return {
+        review: {
+          id: review.id.toString(),
+          rating: review.rating,
+          content: review.content,
+          createdAt: review.createdAt.toISOString(),
+        },
+        careRequest: {
+          id: review.careRequest.id.toString(),
+          serviceType: review.careRequest.serviceType,
+          endDate: serializeDate(review.careRequest.endDate),
+        },
+        confirmedQuote: {
           type: quote.type,
           price: quote.price,
         },

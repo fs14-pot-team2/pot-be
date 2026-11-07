@@ -120,3 +120,44 @@ export const findWritableCareRequests = (
 export const countWritableCareRequests = (ownerId: bigint, today: Date) => {
   return prisma.careRequest.count({ where: writableWhere(ownerId, today) });
 };
+
+// 팟오너가 작성한 리뷰 목록 (최신순, 같은 시각이면 id 내림차순)
+export const findReviewsByOwnerId = (ownerId: bigint, skip: number, take: number) => {
+  return prisma.review.findMany({
+    where: { ownerId },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip,
+    take,
+    select: {
+      id: true,
+      rating: true,
+      content: true,
+      createdAt: true,
+      careRequest: {
+        select: {
+          id: true,
+          serviceType: true,
+          endDate: true,
+          confirmedQuote: {
+            select: {
+              type: true,
+              price: true,
+              sitter: {
+                select: {
+                  id: true,
+                  nickname: true,
+                  sitterProfile: { select: { profileImageUrl: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+};
+
+// 팟오너가 작성한 리뷰 개수
+export const countReviewsByOwnerId = (ownerId: bigint) => {
+  return prisma.review.count({ where: { ownerId } });
+};
