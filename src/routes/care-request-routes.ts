@@ -14,6 +14,7 @@ import {
 import { ignoreCareRequestController } from "../controllers/ignored-request-controller.js";
 import { createQuoteController } from "../controllers/quote-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
+import { createReviewController } from "../controllers/review-controller.js";
 
 export const careRequestRouter = Router();
 
@@ -92,4 +93,12 @@ careRequestRouter.get(
   authenticate,
   authorize("SITTER"),
   getRejectedRequestsBySitterController,
+);
+
+// 리뷰 생성
+careRequestRouter.post(
+  "/:careRequestId/review",
+  authenticate,
+  authorize("OWNER"),
+  createReviewController,
 );
