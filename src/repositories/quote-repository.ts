@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma.js";
-import { QuoteType } from "../generated/prisma/enums.js";
+import type { Prisma } from "../generated/prisma/client.js";
+import { CareRequestStatus, QuoteType } from "../generated/prisma/enums.js";
 import type { DbClient } from "../types/db.js";
 import type { CreateQuoteInput } from "../validators/quote-validator.js";
 
@@ -107,6 +108,88 @@ export function findQuoteDetail(quoteId: bigint, db: DbClient = prisma) {
               gender: true,
               shortIntroduction: true,
             },
+          },
+        },
+      },
+    },
+  });
+}
+
+// 팟트너의 기존 견적 존재 여부 확인
+export function findQuoteBySitterId(sitterId: bigint, db: DbClient = prisma) {
+  return db.quote.findFirst({
+    where: { sitterId },
+    select: { id: true },
+  });
+}
+
+// 보낸 견적 목록 조회 필터 설정
+function buildSentQuoteFilter(
+  sitterId: bigint,
+  statuses: CareRequestStatus[],
+  confirmedOnly: boolean,
+): Prisma.QuoteWhereInput {
+  return {
+    sitterId,
+    careRequest: {
+      status: { in: statuses },
+    },
+    ...(confirmedOnly && {
+      confirmedInRequest: { isNot: null },
+    }),
+  };
+}
+
+// 보낸 견적 전체 건수 조회
+export function countSentQuotes(
+  sitterId: bigint,
+  statuses: CareRequestStatus[],
+  confirmedOnly: boolean,
+  db: DbClient = prisma,
+) {
+  return db.quote.count({
+    where: buildSentQuoteFilter(sitterId, statuses, confirmedOnly),
+  });
+}
+
+// 보낸 견적 목록 조회
+// OPEN 우선 배치는 Service에서 처리하며, 조회 대상 상태 간에는 견적 생성일 최신순 정렬
+export function findSentQuotes(
+  sitterId: bigint,
+  statuses: CareRequestStatus[],
+  confirmedOnly: boolean,
+  skip: number,
+  take: number,
+  db: DbClient = prisma,
+) {
+  return db.quote.findMany({
+    where: buildSentQuoteFilter(sitterId, statuses, confirmedOnly),
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip,
+    take,
+    select: {
+      id: true,
+      price: true,
+      createdAt: true,
+      careRequest: {
+        select: {
+          id: true,
+          status: true,
+          confirmedQuoteId: true,
+          serviceType: true,
+          startDate: true,
+          endDate: true,
+          sido: true,
+          sigungu: true,
+          bname: true,
+          owner: {
+            select: {
+              nickname: true,
+            },
+          },
+          designatedRequests: {
+            where: { sitterId },
+            select: { id: true },
           },
         },
       },

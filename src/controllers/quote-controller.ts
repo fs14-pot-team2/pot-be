@@ -1,7 +1,16 @@
 import type { Request, Response } from "express";
 import AppError from "../errors/app-error.js";
-import { createQuote, getQuoteDetail, updateQuoteService } from "../services/quote-service.js";
-import { validateCreateQuote, validateUpdateQuote } from "../validators/quote-validator.js";
+import {
+  createQuote,
+  getQuoteDetail,
+  getSentQuotes,
+  updateQuoteService,
+} from "../services/quote-service.js";
+import {
+  validateCreateQuote,
+  validateSentQuotesQuery,
+  validateUpdateQuote,
+} from "../validators/quote-validator.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 
 // 팟트너의 견적 생성
@@ -78,4 +87,22 @@ export async function getQuoteDetailController(req: Request, res: Response) {
   const quoteDetail = await getQuoteDetail(quoteId, req.user);
 
   res.status(200).json(serializeBigInt(quoteDetail));
+}
+
+// 팟트너가 보낸 견적 목록 조회
+export async function getSentQuotesController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const sitterId = req.user.id;
+  const { page, pageSize, confirmedOnly } = validateSentQuotesQuery(
+    req.query.page,
+    req.query.pageSize,
+    req.query.confirmedOnly,
+  );
+
+  const sentQuotes = await getSentQuotes(sitterId, page, pageSize, confirmedOnly);
+
+  res.status(200).json(serializeBigInt(sentQuotes));
 }
