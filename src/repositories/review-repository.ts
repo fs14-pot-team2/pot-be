@@ -1,5 +1,6 @@
 import type { DbClient } from "../types/db.js";
 import { prisma } from "../config/prisma.js";
+import { CareRequestStatus } from "../generated/prisma/enums.js";
 
 // 팟트너 프로필 존재 여부 (상세 조회와 같은 SITTER_NOT_FOUND 기준)
 export const existsSitterProfileByUserId = async (userId: bigint) => {
@@ -71,3 +72,51 @@ export function insertReview(
 ) {
   return db.review.create({ data });
 }
+
+// 작성 가능한 리뷰 조건 (목록과 개수가 같은 조건을 쓰도록 공유)
+const writableWhere = (ownerId: bigint, today: Date) => ({
+  ownerId,
+  status: CareRequestStatus.MATCHED,
+  confirmedQuoteId: { not: null },
+  endDate: { lt: today },
+  review: { is: null },
+});
+
+// 작성 가능한 돌봄 요청 목록 (종료일 최신순, 같은 날이면 id 내림차순)
+export const findWritableCareRequests = (
+  ownerId: bigint,
+  today: Date,
+  skip: number,
+  take: number,
+) => {
+  return prisma.careRequest.findMany({
+    where: writableWhere(ownerId, today),
+    orderBy: [{ endDate: "desc" }, { id: "desc" }],
+    skip,
+    take,
+    select: {
+      id: true,
+      serviceType: true,
+      endDate: true,
+      confirmedQuote: {
+        select: {
+          id: true,
+          type: true,
+          price: true,
+          sitter: {
+            select: {
+              id: true,
+              nickname: true,
+              sitterProfile: { select: { profileImageUrl: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+};
+
+// 작성 가능한 돌봄 요청 개수
+export const countWritableCareRequests = (ownerId: bigint, today: Date) => {
+  return prisma.careRequest.count({ where: writableWhere(ownerId, today) });
+};

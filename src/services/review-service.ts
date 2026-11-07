@@ -1,15 +1,18 @@
 import AppError from "../errors/app-error.js";
 import { CareRequestStatus } from "../generated/prisma/enums.js";
 import {
+  countWritableCareRequests,
   existsSitterProfileByUserId,
   findCareRequestForReview,
   findReviewByCareRequestId,
   findReviewsBySitterId,
+  findWritableCareRequests,
   groupRatingDistribution,
   insertReview,
 } from "../repositories/review-repository.js";
-import { isBeforeTodayInKst } from "../utils/kst-date.js";
+import { getTodayInKst, isBeforeTodayInKst } from "../utils/kst-date.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { serializeDate } from "../utils/serialize-date.js";
 import type { CreateReviewInput } from "../validators/review-validator.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
@@ -118,4 +121,47 @@ export async function createReview(
     }
     throw error;
   }
+}
+
+export async function getWritableReviews(ownerId: bigint, page: number, pageSize: number) {
+  const skip = (page - 1) * pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const today = new Date(`${getTodayInKst()}T00:00:00.000Z`);
+
+  const [careRequests, totalCount] = await Promise.all([
+    findWritableCareRequests(ownerId, today, skip, pageSize),
+    countWritableCareRequests(ownerId, today),
+  ]);
+
+  return {
+    items: careRequests.map((careRequest) => {
+      // where 조건에서 confirmedQuoteId not null을 보장하므로 항상 존재
+      const quote = careRequest.confirmedQuote!;
+      return {
+        careRequest: {
+          id: careRequest.id.toString(),
+          serviceType: careRequest.serviceType,
+          endDate: serializeDate(careRequest.endDate),
+        },
+        confirmedQuote: {
+          id: quote.id.toString(),
+          type: quote.type,
+          price: quote.price,
+        },
+        sitter: {
+          id: quote.sitter.id.toString(),
+          nickname: quote.sitter.nickname,
+          profileImageUrl: quote.sitter.sitterProfile?.profileImageUrl ?? null,
+        },
+      };
+    }),
+    page,
+    pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / pageSize),
+  };
 }
