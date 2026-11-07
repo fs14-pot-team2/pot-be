@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { getWritableReviewsController } from "../controllers/review-controller.js";
+import {
+  getMyReviewsController,
+  getWritableReviewsController,
+} from "../controllers/review-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
 export const reviewRouter = Router();
@@ -12,3 +15,6 @@ reviewRouter.get(
   authorize("OWNER"),
   getWritableReviewsController,
 );
+
+// 내가 작성한 리뷰 목록 조회
+reviewRouter.get("/owners/me/reviews", authenticate, authorize("OWNER"), getMyReviewsController);
