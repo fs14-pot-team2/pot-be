@@ -27,7 +27,7 @@ export function validateCreateReviewBody(body: unknown): CreateReviewInput {
     throw new AppError("INVALID_REVIEW_RATING");
   }
 
-  // 문자 수 제한은 공백 제외 기준, 저장은 앞뒤 공백만 제거
+  // 문자 수 제한은 공백 제외 기준, 저장은 원문 유지
   if (typeof content !== "string") {
     throw new AppError("INVALID_REVIEW_CONTENT");
   }
@@ -36,5 +36,5 @@ export function validateCreateReviewBody(body: unknown): CreateReviewInput {
     throw new AppError("INVALID_REVIEW_CONTENT");
   }
 
-  return { rating, content: content.trim() };
+  return { rating, content };
 }
