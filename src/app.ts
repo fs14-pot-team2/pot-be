@@ -9,6 +9,7 @@ import userRoutes from "./routes/user-routes.js";
 import { sitterRouter } from "./routes/sitter-routes.js";
 import { imageRouter } from "./routes/image-routes.js";
 import { quoteRouter } from "./routes/quote-routes.js";
+import { reviewRouter } from "./routes/review-routes.js";
 import { errorMiddleware } from "./middlewares/error-middleware.js";
 
 export const app = express();
@@ -27,7 +28,7 @@ app.use("/auth", authRoutes);
 app.use(profileRouter);
 app.use("/users", userRoutes);
 app.use(sitterRouter);
-
+app.use(reviewRouter);
 app.use("/profile-images", imageRouter);
 
 app.use(errorMiddleware);
