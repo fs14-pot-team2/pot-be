@@ -157,7 +157,7 @@ describe("견적 수정", () => {
   describe("동시 상태 변경 충돌 복구", () => {
     // P2025 이후 돌봄 요청 상태가 변경됐다면 견적 수정 불가 도메인 오류로 변환하는지 확인
     for (const status of ["EXPIRED", "MATCHED", "CANCELED"] as const) {
-      it(`P2025 이후 최초 요청이 ${status} 상태면 견적 수정 불가 오류를 반환한다`, async () => {
+      it(`P2025 이후 돌봄 요청이 ${status} 상태면 견적 수정 불가 오류를 반환한다`, async () => {
         const { sitterId, careRequestId, quoteId, originalQuote } = await createTestRequest();
 
         const runTransaction = async () => {
@@ -186,7 +186,7 @@ describe("견적 수정", () => {
     }
 
     // P2025 이후 돌봄 요청이 OPEN 상태면 원본 Prisma 오류를 전달하고 견적을 수정하지 않는지 확인
-    it("P2025 이후 최초 요청이 OPEN 상태면 원본 Prisma 오류를 전달한다", async () => {
+    it("P2025 이후 돌봄 요청이 OPEN 상태면 원본 Prisma 오류를 전달한다", async () => {
       const { sitterId, careRequestId, quoteId, originalQuote } = await createTestRequest();
 
       const runTransaction = async () => {
