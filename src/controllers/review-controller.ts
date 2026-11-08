@@ -51,3 +51,17 @@ export async function getWritableReviewsController(
     next(error);
   }
 }
+
+export async function getMyReviewsController(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) {
+      throw new AppError("UNAUTHORIZED");
+    }
+
+    const { page, pageSize } = validatePagination(req.query.page, req.query.pageSize);
+    const result = await reviewService.getMyReviews(req.user.id, page, pageSize);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
