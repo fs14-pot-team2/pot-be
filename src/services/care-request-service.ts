@@ -8,6 +8,7 @@ import {
   expireReceivedCareRequests,
   findCareRequest,
   findOpenCareRequest,
+  findOpenCareRequestQuotes,
   findQuoteByCareRequestId,
   findReceivedCareRequests,
   findReceivedDesignatedRequestRegions,
@@ -16,6 +17,8 @@ import {
   lockCareRequestForUpdate,
   updateOpenCareRequest,
 } from "../repositories/care-request-repository.js";
+import { findSitterProfilesForQuotes } from "../repositories/sitter-repository.js";
+import { getSitterAggregates } from "./sitter-aggregate-service.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 import { serializeDate } from "../utils/serialize-date.js";
@@ -297,5 +300,129 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
     pageSize: query.pageSize,
     totalCount,
     totalPages: Math.ceil(totalCount / query.pageSize),
+  };
+}
+
+// 팟오너의 진행 중인 돌봄 요청에 대한 견적 및 반려 현황 조회
+export async function getOpenCareRequestQuotes(ownerId: bigint) {
+  const openCareRequest = await getActiveCareRequest(ownerId);
+
+  if (!openCareRequest) {
+    throw new AppError("CARE_REQUEST_NOT_FOUND");
+  }
+
+  const careRequestQuoteOverview = await findOpenCareRequestQuotes(ownerId);
+
+  if (!careRequestQuoteOverview) {
+    throw new AppError("CARE_REQUEST_NOT_FOUND");
+  }
+
+  const designatedRequestIdBySitterId = new Map(
+    careRequestQuoteOverview.designatedRequests.map((designatedRequest) => [
+      designatedRequest.sitterId,
+      designatedRequest.id,
+    ]),
+  );
+
+  const rejectedDesignatedRequests = careRequestQuoteOverview.designatedRequests
+    .flatMap((designatedRequest) => {
+      const rejectedRequest = designatedRequest.rejectedRequest;
+
+      if (!rejectedRequest) {
+        return [];
+      }
+
+      return [
+        {
+          designatedRequestId: designatedRequest.id,
+          sitterId: designatedRequest.sitterId,
+          rejectedRequestId: rejectedRequest.id,
+          createdAt: rejectedRequest.createdAt,
+        },
+      ];
+    })
+
+    .sort((firstRejectedRequest, secondRejectedRequest) => {
+      const createdAtDifference =
+        secondRejectedRequest.createdAt.getTime() - firstRejectedRequest.createdAt.getTime();
+
+      if (createdAtDifference !== 0) {
+        return createdAtDifference;
+      }
+
+      // 생성일이 같으면 반려 ID 내림차순으로 정렬 (중첩 삼항 연산자 대신 명시적 조건 분기)
+      if (firstRejectedRequest.rejectedRequestId > secondRejectedRequest.rejectedRequestId) {
+        return -1;
+      }
+
+      if (firstRejectedRequest.rejectedRequestId < secondRejectedRequest.rejectedRequestId) {
+        return 1;
+      }
+
+      return 0;
+    });
+
+  // 견적 제출자와 반려한 팟트너의 ID를 중복 없이 수집
+  const sitterIds = [
+    ...new Set([
+      ...careRequestQuoteOverview.quotes.map((quote) => quote.sitterId),
+      ...rejectedDesignatedRequests.map((rejectedRequest) => rejectedRequest.sitterId),
+    ]),
+  ];
+
+  const [sitterProfiles, sitterAggregates] = await Promise.all([
+    findSitterProfilesForQuotes(sitterIds),
+    getSitterAggregates(sitterIds),
+  ]);
+
+  const sitterProfileByUserId = new Map(
+    sitterProfiles.map((sitterProfile) => [sitterProfile.userId, sitterProfile]),
+  );
+
+  function buildSitterResponse(sitterId: bigint) {
+    const sitterProfile = sitterProfileByUserId.get(sitterId);
+
+    if (!sitterProfile) {
+      throw new AppError("SITTER_PROFILE_INCONSISTENT");
+    }
+
+    const sitterAggregate = sitterAggregates.get(sitterId);
+
+    return {
+      id: sitterId,
+      nickname: sitterProfile.user.nickname,
+      profileImageUrl: sitterProfile.profileImageUrl,
+      gender: sitterProfile.gender,
+      shortIntroduction: sitterProfile.shortIntroduction,
+      averageRating: sitterAggregate?.averageRating ?? 0,
+      reviewCount: sitterAggregate?.reviewCount ?? 0,
+      confirmedQuoteCount: sitterAggregate?.confirmedQuoteCount ?? 0,
+    };
+  }
+
+  return {
+    careRequest: {
+      id: careRequestQuoteOverview.id,
+      createdAt: careRequestQuoteOverview.createdAt,
+      serviceType: careRequestQuoteOverview.serviceType,
+      startDate: serializeDate(careRequestQuoteOverview.startDate),
+      endDate: serializeDate(careRequestQuoteOverview.endDate),
+      sido: careRequestQuoteOverview.sido,
+      sigungu: careRequestQuoteOverview.sigungu,
+      bname: careRequestQuoteOverview.bname,
+    },
+    quotes: careRequestQuoteOverview.quotes.map((quote) => ({
+      id: quote.id,
+      designatedRequestId: designatedRequestIdBySitterId.get(quote.sitterId) ?? null,
+      price: quote.price,
+      createdAt: quote.createdAt,
+      sitter: buildSitterResponse(quote.sitterId),
+    })),
+    rejectedRequests: rejectedDesignatedRequests.map((rejectedRequest) => ({
+      rejectedRequestId: rejectedRequest.rejectedRequestId,
+      designatedRequestId: rejectedRequest.designatedRequestId,
+      createdAt: rejectedRequest.createdAt,
+      sitter: buildSitterResponse(rejectedRequest.sitterId),
+    })),
   };
 }

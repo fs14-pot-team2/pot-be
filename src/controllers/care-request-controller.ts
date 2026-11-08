@@ -3,6 +3,7 @@ import AppError from "../errors/app-error.js";
 import {
   createCareRequest,
   getActiveCareRequest,
+  getOpenCareRequestQuotes,
   getReceivedCareRequests,
   updateCareRequest,
 } from "../services/care-request-service.js";
@@ -154,4 +155,16 @@ export async function getReceivedCareRequestsController(req: Request, res: Respo
       totalPages: result.totalPages,
     }),
   );
+}
+
+// 팟오너의 요청한 견적 현황 조회
+export async function getOpenCareRequestQuotesController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const ownerId = req.user.id;
+  const careRequestQuoteOverview = await getOpenCareRequestQuotes(ownerId);
+
+  res.status(200).json(serializeBigInt(careRequestQuoteOverview));
 }

@@ -74,3 +74,23 @@ export const findDesignationRelation = async (careRequestId: bigint, sitterId: b
     hasQuote: quote !== null,
   };
 };
+
+// 견적 현황 및 견적 이력 조회에 필요한 팟트너 프로필 일괄 조회
+export function findSitterProfilesForQuotes(sitterIds: bigint[]) {
+  return prisma.sitterProfile.findMany({
+    where: {
+      userId: { in: sitterIds },
+    },
+    select: {
+      userId: true,
+      profileImageUrl: true,
+      gender: true,
+      shortIntroduction: true,
+      user: {
+        select: {
+          nickname: true,
+        },
+      },
+    },
+  });
+}
