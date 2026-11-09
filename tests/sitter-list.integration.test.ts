@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
-import type { Gender, Region, ServiceType } from "../src/generated/prisma/enums.js";
+import { Region } from "../src/generated/prisma/enums.js";
+import type { Gender, ServiceType } from "../src/generated/prisma/enums.js";
 import { getSitterList } from "../src/services/sitter-service.js";
 import { validateSitterListQuery } from "../src/validators/sitter-validator.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
@@ -14,6 +15,8 @@ function futureDate(days: number) {
   date.setUTCDate(date.getUTCDate() + days);
   return new Date(date.toISOString().slice(0, 10));
 }
+
+const ALL_REGIONS = Object.values(Region);
 
 // 이번 테스트 실행에서 만든 팟트너만 골라내기 위한 고유 접두사
 const PREFIX = `sl-${randomUUID().slice(0, 8)}`;
@@ -205,7 +208,7 @@ describe("팟트너 찾기 목록 조회", () => {
       assert.deepEqual(names, ["s-regular"]);
     });
 
-    it("gender 복수 선택을 지원한다", async () => {
+    it("gender로 한 성별만 조회한다", async () => {
       await createSitter({ name: "g-male", gender: "MALE" });
       await createSitter({ name: "g-female", gender: "FEMALE" });
 
@@ -213,9 +216,9 @@ describe("팟트너 찾기 목록 조회", () => {
       assert.ok(nicknamesOf(onlyMale).includes("g-male"));
       assert.ok(!nicknamesOf(onlyMale).includes("g-female"));
 
-      const both = await listMine({ gender: "MALE,FEMALE" });
-      assert.ok(nicknamesOf(both).includes("g-male"));
-      assert.ok(nicknamesOf(both).includes("g-female"));
+      const onlyFemale = await listMine({ gender: "FEMALE" });
+      assert.ok(nicknamesOf(onlyFemale).includes("g-female"));
+      assert.ok(!nicknamesOf(onlyFemale).includes("g-male"));
     });
 
     it("keyword는 닉네임 부분 일치이며 대소문자를 구분하지 않는다", async () => {
@@ -380,6 +383,13 @@ describe("팟트너 찾기 목록 조회", () => {
       ["page 소수", { page: "1.5" }, "INVALID_PAGE_PARAMETER"],
       ["page 안전 정수 초과", { page: "9007199254740992" }, "INVALID_PAGE_PARAMETER"],
       ["page 앞자리 0", { page: "01" }, "INVALID_PAGE_PARAMETER"],
+      [
+        "serviceTypes 2개 선택",
+        { serviceTypes: "SHORT_CARE,REGULAR_CARE" },
+        "INVALID_SERVICE_TYPE",
+      ],
+      ["gender 2개 선택", { gender: "MALE,FEMALE" }, "INVALID_GENDER"],
+      ["regions 17개 선택", { regions: ALL_REGIONS.join(",") }, "INVALID_REGION"],
       ["잘못된 sort", { sort: "foo" }, "INVALID_REQUEST"],
       ["빈 문자열 sort", { sort: "" }, "INVALID_REQUEST"],
     ];
@@ -399,6 +409,26 @@ describe("팟트너 찾기 목록 조회", () => {
       assert.equal(parsed.page, 1);
       assert.equal(parsed.pageSize, 8);
       assert.equal(parsed.sort, "RATING_DESC");
+    });
+
+    it("regions는 16개까지 선택할 수 있다", () => {
+      const sixteen = ALL_REGIONS.slice(0, 16);
+      const parsed = validateSitterListQuery({ regions: sixteen.join(",") });
+
+      assert.deepEqual(parsed.regions, sixteen);
+    });
+
+    it("serviceTypes와 gender는 1개까지 선택할 수 있다", () => {
+      const parsed = validateSitterListQuery({ serviceTypes: "SHORT_CARE", gender: "FEMALE" });
+
+      assert.deepEqual(parsed.serviceTypes, ["SHORT_CARE"]);
+      assert.deepEqual(parsed.genders, ["FEMALE"]);
+    });
+
+    it("같은 값을 반복해도 중복 제거 후 개수로 판단한다", () => {
+      const parsed = validateSitterListQuery({ serviceTypes: "SHORT_CARE,SHORT_CARE" });
+
+      assert.deepEqual(parsed.serviceTypes, ["SHORT_CARE"]);
     });
 
     it("값이 중복되어도 한 번만 적용한다", () => {
