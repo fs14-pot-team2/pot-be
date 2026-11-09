@@ -185,6 +185,7 @@ export function findSentQuotes(
     select: {
       id: true,
       price: true,
+      comment: true,
       createdAt: true,
       careRequest: {
         select: {
