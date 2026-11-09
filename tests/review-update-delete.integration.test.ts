@@ -249,4 +249,19 @@ describe("내가 작성한 리뷰 삭제", () => {
       assertAppError("REVIEW_NOT_FOUND", 404),
     );
   });
+
+  it("같은 리뷰를 동시에 삭제하면 한 건만 성공하고 나머지는 REVIEW_NOT_FOUND다", async () => {
+    const { ownerId, review } = await setupReview("del-race");
+
+    const results = await Promise.allSettled([
+      deleteReview(ownerId, review.id),
+      deleteReview(ownerId, review.id),
+    ]);
+
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+    assert.equal(rejected.length, 1);
+    assert.ok(assertAppError("REVIEW_NOT_FOUND", 404)(rejected[0].reason));
+    assert.equal(await prisma.review.findUnique({ where: { id: review.id } }), null);
+  });
 });
