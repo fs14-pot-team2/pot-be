@@ -3,19 +3,22 @@ import { CareRequestStatus } from "../generated/prisma/enums.js";
 import {
   countReviewsByOwnerId,
   findReviewsByOwnerId,
+  deleteReviewById,
   countWritableCareRequests,
   existsSitterProfileByUserId,
   findCareRequestForReview,
+  findReviewOwnerById,
   findReviewByCareRequestId,
   findReviewsBySitterId,
   findWritableCareRequests,
   groupRatingDistribution,
   insertReview,
+  updateReviewById,
 } from "../repositories/review-repository.js";
 import { getTodayInKst, isBeforeTodayInKst } from "../utils/kst-date.js";
-import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { getUniqueConstraintName, isRecordNotFoundError } from "../utils/prisma-error.js";
 import { serializeDate } from "../utils/serialize-date.js";
-import type { CreateReviewInput } from "../validators/review-validator.js";
+import type { CreateReviewInput, UpdateReviewInput } from "../validators/review-validator.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 const REVIEW_CARE_REQUEST_UNIQUE_INDEX = "Review_careRequestId_key";
@@ -212,4 +215,58 @@ export async function getMyReviews(ownerId: bigint, page: number, pageSize: numb
     totalCount,
     totalPages: Math.ceil(totalCount / pageSize),
   };
+}
+
+// 리뷰 존재 + 작성자 본인 확인 (수정·삭제 공통)
+async function assertReviewOwner(userId: bigint, reviewId: bigint) {
+  const review = await findReviewOwnerById(reviewId);
+
+  if (!review) {
+    throw new AppError("REVIEW_NOT_FOUND");
+  }
+
+  if (review.ownerId !== userId) {
+    throw new AppError("REVIEW_ACCESS_FORBIDDEN");
+  }
+}
+
+// 수정·삭제 중 대상 리뷰가 사라진 경우 (P2025 공통 기준: 재조회 후 소실이면 비즈니스 에러)
+async function handleReviewWriteError(error: unknown, reviewId: bigint): Promise<never> {
+  if (isRecordNotFoundError(error) && !(await findReviewOwnerById(reviewId))) {
+    throw new AppError("REVIEW_NOT_FOUND");
+  }
+  // 원인을 식별할 수 없으면 원본 전파 (INTERNAL_SERVER_ERROR)
+  throw error;
+}
+
+export async function updateReview(userId: bigint, reviewId: bigint, input: UpdateReviewInput) {
+  await assertReviewOwner(userId, reviewId);
+
+  try {
+    const review = await updateReviewById(reviewId, input);
+
+    return {
+      id: review.id.toString(),
+      careRequestId: review.careRequestId.toString(),
+      ownerId: review.ownerId.toString(),
+      sitterId: review.sitterId.toString(),
+      rating: review.rating,
+      content: review.content,
+      updatedAt: review.updatedAt.toISOString(),
+    };
+  } catch (error) {
+    return handleReviewWriteError(error, reviewId);
+  }
+}
+
+export async function deleteReview(userId: bigint, reviewId: bigint) {
+  await assertReviewOwner(userId, reviewId);
+
+  try {
+    await deleteReviewById(reviewId);
+  } catch (error) {
+    return handleReviewWriteError(error, reviewId);
+  }
+
+  return { message: "리뷰가 삭제되었습니다." };
 }

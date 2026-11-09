@@ -20,3 +20,8 @@ export function getUniqueConstraintName(error: unknown): string | null {
 
   return typeof constraintName === "string" ? constraintName : null;
 }
+
+// P2025 오류 여부 (조회 이후 대상 레코드가 사라져 수정·삭제 실패)
+export function isRecordNotFoundError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "P2025";
+}
