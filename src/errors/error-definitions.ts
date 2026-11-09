@@ -83,6 +83,12 @@ export const ERROR_DEFINITIONS = {
     message: "비밀번호가 일치하지 않습니다.",
     statusCode: 401,
   },
+  // 개인정보 수정 전 본인 확인(재인증) 필요
+  REAUTHENTICATION_REQUIRED: {
+    code: "REAUTHENTICATION_REQUIRED",
+    message: "본인 확인이 필요합니다.",
+    statusCode: 403,
+  },
   // 토큰 만료
   REFRESH_TOKEN_INVALID: {
     code: "REFRESH_TOKEN_INVALID",
