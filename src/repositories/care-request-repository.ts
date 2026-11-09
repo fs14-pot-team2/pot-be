@@ -238,3 +238,44 @@ export function findReceivedDesignatedRequestRegions(
     distinct: ["region"],
   });
 }
+
+// 팟오너의 활성 돌봄 요청 및 견적·반려 현황 조회
+export function findOpenCareRequestQuotes(ownerId: bigint, db: DbClient = prisma) {
+  return db.careRequest.findFirst({
+    where: {
+      ownerId,
+      status: CareRequestStatus.OPEN,
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      serviceType: true,
+      startDate: true,
+      endDate: true,
+      sido: true,
+      sigungu: true,
+      bname: true,
+      quotes: {
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: {
+          id: true,
+          sitterId: true,
+          price: true,
+          createdAt: true,
+        },
+      },
+      designatedRequests: {
+        select: {
+          id: true,
+          sitterId: true,
+          rejectedRequest: {
+            select: {
+              id: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}

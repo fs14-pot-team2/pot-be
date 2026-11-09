@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createCareRequestController,
   getActiveCareRequestController,
+  getOpenCareRequestQuotesController,
   getReceivedCareRequestsController,
   updateCareRequestController,
 } from "../controllers/care-request-controller.js";
@@ -25,6 +26,14 @@ careRequestRouter.get(
   authenticate,
   authorize("OWNER"),
   getActiveCareRequestController,
+);
+
+// 돌봄 요청의 견적 및 반려 현황 조회
+careRequestRouter.get(
+  "/me/active/quotes",
+  authenticate,
+  authorize("OWNER"),
+  getOpenCareRequestQuotesController,
 );
 
 // 돌봄 요청 생성
