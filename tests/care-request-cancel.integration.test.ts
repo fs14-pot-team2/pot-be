@@ -11,6 +11,7 @@ import {
   createQuote,
   updateQuoteService,
 } from "../src/services/quote-service.js";
+import type { TransactionRunner } from "../src/types/db.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
 // 테스트에 사용할 KST 기준 날짜
@@ -36,6 +37,78 @@ function assertP2025(error: unknown) {
 function assertAppError(code: string, statusCode = 409) {
   return (error: unknown) =>
     error instanceof AppError && error.code === code && error.statusCode === statusCode;
+}
+
+// 첫 번째 트랜잭션의 커밋을 보류하고 두 번째 트랜잭션이 시작된 후 완료
+async function runWithOrderedTransactions<TFirst, TSecond>(
+  firstOperation: (runTransaction: TransactionRunner) => Promise<TFirst>,
+  secondOperation: (runTransaction: TransactionRunner) => Promise<TSecond>,
+): Promise<[PromiseSettledResult<TFirst>, PromiseSettledResult<TSecond>]> {
+  let notifyFirstReady!: () => void;
+  let notifySecondStarted!: () => void;
+  let releaseFirstCommit!: () => void;
+
+  const firstReady = new Promise<void>((resolve) => {
+    notifyFirstReady = resolve;
+  });
+
+  const secondStarted = new Promise<void>((resolve) => {
+    notifySecondStarted = resolve;
+  });
+
+  const firstCommitAllowed = new Promise<void>((resolve) => {
+    releaseFirstCommit = resolve;
+  });
+
+  const firstRunner: TransactionRunner = (callback) =>
+    prisma.$transaction(async (tx) => {
+      const result = await callback(tx);
+      notifyFirstReady();
+      await firstCommitAllowed;
+      return result;
+    });
+
+  const secondRunner: TransactionRunner = (callback) =>
+    prisma.$transaction(async (tx) => {
+      notifySecondStarted();
+      return callback(tx);
+    });
+
+  const firstResult = firstOperation(firstRunner);
+  let secondResult: Promise<TSecond> | undefined;
+
+  try {
+    await Promise.race([
+      firstReady,
+      firstResult.then(
+        () => {
+          throw new Error("첫 번째 트랜잭션이 예상보다 먼저 종료되었습니다.");
+        },
+        (error: unknown) => {
+          throw error;
+        },
+      ),
+    ]);
+
+    secondResult = secondOperation(secondRunner);
+
+    await Promise.race([
+      secondStarted,
+      secondResult.then(
+        () => {
+          throw new Error("두 번째 트랜잭션이 예상보다 먼저 종료되었습니다.");
+        },
+        (error: unknown) => {
+          throw error;
+        },
+      ),
+    ]);
+  } finally {
+    releaseFirstCommit();
+  }
+
+  assert.ok(secondResult);
+  return Promise.allSettled([firstResult, secondResult]);
 }
 
 // 각 테스트에서 사용할 독립적인 팟오너, 돌봄 요청 및 팟트너 생성
@@ -141,105 +214,140 @@ describe("돌봄 요청 취소", () => {
       assert.ok(savedRequest.canceledAt instanceof Date);
       assert.equal(savedRequest.confirmedQuoteId, null);
       assert.ok(succeeded[0].value.canceledAt instanceof Date);
-      assert.ok(savedRequest.canceledAt instanceof Date);
 
       assert.equal(succeeded[0].value.canceledAt.getTime(), savedRequest.canceledAt.getTime());
     });
 
-    // 취소와 견적 확정이 동시에 실행되면 한 상태 변경만 성공하는지 확인
-    it("돌봄 요청 취소와 견적 확정이 동시에 실행되면 하나의 상태 변경만 허용한다", async () => {
-      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+    // 취소와 견적 확정의 실행 순서를 각각 고정하여 하나의 상태 변경만 허용하는지 확인
+    for (const firstOperation of ["CANCEL", "CONFIRM"] as const) {
+      it(`돌봄 요청 취소와 견적 확정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async () => {
+        const { ownerId, sitterId, careRequestId } = await createTestRequest();
+        const quote = await createTestQuote(careRequestId, sitterId);
 
-      const quote = await createTestQuote(careRequestId, sitterId);
+        const cancel = (runTransaction: TransactionRunner) =>
+          cancelCareRequestService(ownerId, careRequestId, runTransaction);
 
-      const [cancelResult, confirmResult] = await Promise.allSettled([
-        cancelCareRequestService(ownerId, careRequestId),
-        confirmQuoteService(ownerId, quote.id),
-      ]);
+        const confirm = (runTransaction: TransactionRunner) =>
+          confirmQuoteService(ownerId, quote.id, runTransaction);
 
-      const savedRequest = await prisma.careRequest.findUniqueOrThrow({
-        where: { id: careRequestId },
+        const [firstResult, secondResult] =
+          firstOperation === "CANCEL"
+            ? await runWithOrderedTransactions(cancel, confirm)
+            : await runWithOrderedTransactions(confirm, cancel);
+
+        assert.equal(firstResult.status, "fulfilled");
+        assert.equal(secondResult.status, "rejected");
+        assert.ok(assertAppError("CARE_REQUEST_NOT_FOUND", 404)(secondResult.reason));
+
+        const savedRequest = await prisma.careRequest.findUniqueOrThrow({
+          where: { id: careRequestId },
+        });
+
+        if (firstOperation === "CANCEL") {
+          assert.equal(savedRequest.status, "CANCELED");
+          assert.ok(savedRequest.canceledAt instanceof Date);
+          assert.equal(savedRequest.confirmedQuoteId, null);
+        } else {
+          assert.equal(savedRequest.status, "MATCHED");
+          assert.equal(savedRequest.confirmedQuoteId, quote.id);
+          assert.equal(savedRequest.canceledAt, null);
+        }
+
+        assert.equal(await prisma.quote.count({ where: { careRequestId } }), 1);
       });
+    }
 
-      if (cancelResult.status === "fulfilled") {
-        assert.equal(confirmResult.status, "rejected");
-        assert.ok(assertAppError("CARE_REQUEST_NOT_FOUND", 404)(confirmResult.reason));
+    // 취소와 견적 생성의 실행 순서를 각각 고정하여 견적 생성 가능 여부를 확인
+    for (const firstOperation of ["CANCEL", "CREATE"] as const) {
+      it(`돌봄 요청 취소와 견적 생성이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async () => {
+        const { ownerId, sitterId, careRequestId } = await createTestRequest();
+
+        const cancel = (runTransaction: TransactionRunner) =>
+          cancelCareRequestService(ownerId, careRequestId, runTransaction);
+
+        const create = (runTransaction: TransactionRunner) =>
+          createQuote(
+            sitterId,
+            careRequestId,
+            15000,
+            "취소와 동시에 제출하는 테스트 견적입니다.",
+            runTransaction,
+          );
+
+        const [firstResult, secondResult] =
+          firstOperation === "CANCEL"
+            ? await runWithOrderedTransactions(cancel, create)
+            : await runWithOrderedTransactions(create, cancel);
+
+        assert.equal(firstResult.status, "fulfilled");
+
+        if (firstOperation === "CANCEL") {
+          assert.equal(secondResult.status, "rejected");
+          assert.ok(assertAppError("QUOTE_EDIT_NOT_ALLOWED")(secondResult.reason));
+        } else {
+          assert.equal(secondResult.status, "fulfilled");
+        }
+
+        const savedRequest = await prisma.careRequest.findUniqueOrThrow({
+          where: { id: careRequestId },
+        });
+
+        const quotes = await prisma.quote.findMany({
+          where: { careRequestId },
+        });
+
         assert.equal(savedRequest.status, "CANCELED");
         assert.ok(savedRequest.canceledAt instanceof Date);
-        assert.equal(savedRequest.confirmedQuoteId, null);
-      } else {
-        assert.equal(confirmResult.status, "fulfilled");
-        assert.ok(assertAppError("CARE_REQUEST_NOT_FOUND", 404)(cancelResult.reason));
-        assert.equal(savedRequest.status, "MATCHED");
-        assert.equal(savedRequest.confirmedQuoteId, quote.id);
-        assert.equal(savedRequest.canceledAt, null);
-      }
+        assert.equal(quotes.length, firstOperation === "CREATE" ? 1 : 0);
 
-      assert.equal(await prisma.quote.count({ where: { careRequestId } }), 1);
-    });
-
-    // 견적 생성과 취소가 동시에 실행될 때 취소 상태 이후 견적 생성을 차단하는지 확인
-    it("돌봄 요청 취소와 견적 생성이 동시에 실행되면 처리 순서에 따라 생성 여부를 결정한다", async () => {
-      const { ownerId, sitterId, careRequestId } = await createTestRequest();
-
-      const [cancelResult, createResult] = await Promise.allSettled([
-        cancelCareRequestService(ownerId, careRequestId),
-        createQuote(sitterId, careRequestId, 15000, "취소와 동시에 제출하는 테스트 견적입니다."),
-      ]);
-
-      assert.equal(cancelResult.status, "fulfilled");
-
-      const savedRequest = await prisma.careRequest.findUniqueOrThrow({
-        where: { id: careRequestId },
+        if (firstOperation === "CREATE") {
+          assert.equal(firstResult.status, "fulfilled");
+          assert.ok("careRequestId" in firstResult.value);
+          assert.equal(firstResult.value.careRequestId, careRequestId);
+          assert.equal(quotes[0].careRequestId, careRequestId);
+        }
       });
+    }
 
-      const quoteCount = await prisma.quote.count({
-        where: { careRequestId },
+    // 취소와 견적 수정의 실행 순서를 각각 고정하여 견적 수정 가능 여부를 확인
+    for (const firstOperation of ["CANCEL", "UPDATE"] as const) {
+      it(`돌봄 요청 취소와 견적 수정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async () => {
+        const { ownerId, sitterId, careRequestId } = await createTestRequest();
+        const quote = await createTestQuote(careRequestId, sitterId);
+
+        const cancel = (runTransaction: TransactionRunner) =>
+          cancelCareRequestService(ownerId, careRequestId, runTransaction);
+
+        const update = (runTransaction: TransactionRunner) =>
+          updateQuoteService(sitterId, quote.id, { price: 25000 }, runTransaction);
+
+        const [firstResult, secondResult] =
+          firstOperation === "CANCEL"
+            ? await runWithOrderedTransactions(cancel, update)
+            : await runWithOrderedTransactions(update, cancel);
+
+        assert.equal(firstResult.status, "fulfilled");
+
+        if (firstOperation === "CANCEL") {
+          assert.equal(secondResult.status, "rejected");
+          assert.ok(assertAppError("QUOTE_EDIT_NOT_ALLOWED")(secondResult.reason));
+        } else {
+          assert.equal(secondResult.status, "fulfilled");
+        }
+
+        const savedRequest = await prisma.careRequest.findUniqueOrThrow({
+          where: { id: careRequestId },
+        });
+
+        const savedQuote = await prisma.quote.findUniqueOrThrow({
+          where: { id: quote.id },
+        });
+
+        assert.equal(savedRequest.status, "CANCELED");
+        assert.ok(savedRequest.canceledAt instanceof Date);
+        assert.equal(savedQuote.price, firstOperation === "UPDATE" ? 25000 : quote.price);
       });
-
-      assert.equal(savedRequest.status, "CANCELED");
-      assert.ok(savedRequest.canceledAt instanceof Date);
-
-      if (createResult.status === "fulfilled") {
-        assert.equal(quoteCount, 1);
-        assert.equal(createResult.value.careRequestId, careRequestId);
-      } else {
-        assert.ok(assertAppError("QUOTE_EDIT_NOT_ALLOWED")(createResult.reason));
-        assert.equal(quoteCount, 0);
-      }
-    });
-
-    // 견적 수정과 취소의 잠금 순서에 따라 수정 여부를 결정하는지 확인
-    it("돌봄 요청 취소와 견적 수정이 동시에 실행되면 처리 순서에 따라 수정 여부를 결정한다", async () => {
-      const { ownerId, sitterId, careRequestId } = await createTestRequest();
-
-      const quote = await createTestQuote(careRequestId, sitterId);
-
-      const [cancelResult, updateResult] = await Promise.allSettled([
-        cancelCareRequestService(ownerId, careRequestId),
-        updateQuoteService(sitterId, quote.id, { price: 25000 }),
-      ]);
-
-      assert.equal(cancelResult.status, "fulfilled");
-
-      const savedRequest = await prisma.careRequest.findUniqueOrThrow({
-        where: { id: careRequestId },
-      });
-
-      const savedQuote = await prisma.quote.findUniqueOrThrow({
-        where: { id: quote.id },
-      });
-
-      assert.equal(savedRequest.status, "CANCELED");
-      assert.ok(savedRequest.canceledAt instanceof Date);
-
-      if (updateResult.status === "fulfilled") {
-        assert.equal(savedQuote.price, 25000);
-      } else {
-        assert.ok(assertAppError("QUOTE_EDIT_NOT_ALLOWED")(updateResult.reason));
-        assert.equal(savedQuote.price, quote.price);
-      }
-    });
+    }
 
     // 취소와 정기 만료 조건의 동시 실행 시 EXPIRED 상태를 유지하는지 확인
     it("만료 대상 요청의 취소와 만료 처리가 동시에 실행되면 취소를 차단한다", async () => {
