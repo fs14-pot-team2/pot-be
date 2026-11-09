@@ -124,6 +124,21 @@ export function updateOpenCareRequest(
   });
 }
 
+// 활성 돌봄 요청 취소
+export function cancelCareRequest(careRequestId: bigint, ownerId: bigint, db: DbClient = prisma) {
+  return db.careRequest.update({
+    where: {
+      id: careRequestId,
+      ownerId,
+      status: CareRequestStatus.OPEN,
+    },
+    data: {
+      status: CareRequestStatus.CANCELED,
+      canceledAt: new Date(),
+    },
+  });
+}
+
 // 팟트너 프로필 등록 여부 및 서비스 가능 지역 확인
 export function findSitterProfileWithRegions(sitterId: bigint, db: DbClient = prisma) {
   return db.sitterProfile.findUnique({

@@ -4,6 +4,7 @@ import { CareRequestStatus, type Region } from "../generated/prisma/enums.js";
 import AppError from "../errors/app-error.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
+  cancelCareRequest,
   countReceivedCareRequests,
   expireReceivedCareRequests,
   findCareRequest,
@@ -208,6 +209,75 @@ export async function updateCareRequest(
 
     if (refreshedRequest && refreshedRequest.status !== "OPEN") {
       throw new AppError("CARE_REQUEST_STATUS_NOT_EDITABLE");
+    }
+
+    throw error;
+  }
+}
+
+// 팟오너의 돌봄 요청 취소
+export async function cancelCareRequestService(
+  ownerId: bigint,
+  careRequestId: bigint,
+  runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
+) {
+  const initialRequest = await findCareRequest(careRequestId);
+
+  if (!initialRequest) {
+    throw new AppError("CARE_REQUEST_NOT_FOUND");
+  }
+
+  if (initialRequest.ownerId !== ownerId) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  try {
+    const canceledRequest = await runTransaction(async (tx) => {
+      await lockCareRequestForUpdate(careRequestId, tx);
+
+      const targetRequest = await findCareRequest(careRequestId, tx);
+
+      if (!targetRequest) {
+        throw new AppError("CARE_REQUEST_NOT_FOUND");
+      }
+
+      if (targetRequest.status === "CANCELED") {
+        throw new AppError("CARE_REQUEST_ALREADY_CANCELED");
+      }
+
+      if (targetRequest.status !== "OPEN") {
+        throw new AppError("CARE_REQUEST_NOT_FOUND");
+      }
+
+      const wasExpired = await expireCareRequestIfPast(targetRequest, tx);
+
+      if (wasExpired) {
+        return null;
+      }
+
+      return cancelCareRequest(careRequestId, ownerId, tx);
+    });
+
+    if (!canceledRequest) {
+      throw new AppError("CARE_REQUEST_NOT_FOUND");
+    }
+
+    return canceledRequest;
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "P2025")) {
+      throw error;
+    }
+
+    const refreshedRequest = await findCareRequest(careRequestId);
+
+    if (refreshedRequest) {
+      if (refreshedRequest.status === "CANCELED") {
+        throw new AppError("CARE_REQUEST_ALREADY_CANCELED");
+      }
+
+      if (refreshedRequest.status !== "OPEN") {
+        throw new AppError("CARE_REQUEST_NOT_FOUND");
+      }
     }
 
     throw error;
