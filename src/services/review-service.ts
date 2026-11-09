@@ -3,19 +3,22 @@ import { CareRequestStatus } from "../generated/prisma/enums.js";
 import {
   countReviewsByOwnerId,
   findReviewsByOwnerId,
+  deleteReviewById,
   countWritableCareRequests,
   existsSitterProfileByUserId,
   findCareRequestForReview,
+  findReviewOwnerById,
   findReviewByCareRequestId,
   findReviewsBySitterId,
   findWritableCareRequests,
   groupRatingDistribution,
   insertReview,
+  updateReviewById,
 } from "../repositories/review-repository.js";
 import { getTodayInKst, isBeforeTodayInKst } from "../utils/kst-date.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import { serializeDate } from "../utils/serialize-date.js";
-import type { CreateReviewInput } from "../validators/review-validator.js";
+import type { CreateReviewInput, UpdateReviewInput } from "../validators/review-validator.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 const REVIEW_CARE_REQUEST_UNIQUE_INDEX = "Review_careRequestId_key";
@@ -212,4 +215,40 @@ export async function getMyReviews(ownerId: bigint, page: number, pageSize: numb
     totalCount,
     totalPages: Math.ceil(totalCount / pageSize),
   };
+}
+// 리뷰 존재 + 작성자 본인 확인 (수정·삭제 공통)
+async function assertReviewOwner(userId: bigint, reviewId: bigint) {
+  const review = await findReviewOwnerById(reviewId);
+
+  if (!review) {
+    throw new AppError("REVIEW_NOT_FOUND");
+  }
+
+  if (review.ownerId !== userId) {
+    throw new AppError("REVIEW_ACCESS_FORBIDDEN");
+  }
+}
+
+export async function updateReview(userId: bigint, reviewId: bigint, input: UpdateReviewInput) {
+  await assertReviewOwner(userId, reviewId);
+
+  const review = await updateReviewById(reviewId, input);
+
+  return {
+    id: review.id.toString(),
+    careRequestId: review.careRequestId.toString(),
+    ownerId: review.ownerId.toString(),
+    sitterId: review.sitterId.toString(),
+    rating: review.rating,
+    content: review.content,
+    updatedAt: review.updatedAt.toISOString(),
+  };
+}
+
+export async function deleteReview(userId: bigint, reviewId: bigint) {
+  await assertReviewOwner(userId, reviewId);
+
+  await deleteReviewById(reviewId);
+
+  return { message: "리뷰가 삭제되었습니다." };
 }

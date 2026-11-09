@@ -161,3 +161,24 @@ export const findReviewsByOwnerId = (ownerId: bigint, skip: number, take: number
 export const countReviewsByOwnerId = (ownerId: bigint) => {
   return prisma.review.count({ where: { ownerId } });
 };
+// 수정·삭제 권한 확인용 리뷰 조회
+export function findReviewOwnerById(reviewId: bigint, db: DbClient = prisma) {
+  return db.review.findUnique({
+    where: { id: reviewId },
+    select: { id: true, ownerId: true },
+  });
+}
+
+// 리뷰 수정 (undefined 필드는 Prisma가 무시)
+export function updateReviewById(
+  reviewId: bigint,
+  data: { rating?: number; content?: string },
+  db: DbClient = prisma,
+) {
+  return db.review.update({ where: { id: reviewId }, data });
+}
+
+// 리뷰 삭제 (하드 삭제)
+export function deleteReviewById(reviewId: bigint, db: DbClient = prisma) {
+  return db.review.delete({ where: { id: reviewId } });
+}
