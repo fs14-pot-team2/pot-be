@@ -19,8 +19,8 @@ function buildWhere(filter: SitterListFilter) {
       user: { nickname: { contains: filter.keyword, mode: "insensitive" as const } },
     }),
     ...(filter.genders && { gender: { in: filter.genders } }),
-    ...(filter.services && {
-      sitterServices: { some: { serviceType: { in: filter.services } } },
+    ...(filter.serviceTypes && {
+      sitterServices: { some: { serviceType: { in: filter.serviceTypes } } },
     }),
     ...(filter.regions && {
       sitterServiceRegions: { some: { region: { in: filter.regions } } },

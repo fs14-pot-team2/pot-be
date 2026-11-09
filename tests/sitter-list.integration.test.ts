@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
-import type { Gender, Region, ServiceType } from "../src/generated/prisma/enums.js";
+import { Region } from "../src/generated/prisma/enums.js";
+import type { Gender, ServiceType } from "../src/generated/prisma/enums.js";
 import { getSitterList } from "../src/services/sitter-service.js";
 import { validateSitterListQuery } from "../src/validators/sitter-validator.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
@@ -14,6 +15,8 @@ function futureDate(days: number) {
   date.setUTCDate(date.getUTCDate() + days);
   return new Date(date.toISOString().slice(0, 10));
 }
+
+const ALL_REGIONS = Object.values(Region);
 
 // 이번 테스트 실행에서 만든 팟트너만 골라내기 위한 고유 접두사
 const PREFIX = `sl-${randomUUID().slice(0, 8)}`;
@@ -94,6 +97,49 @@ async function addReviews(sitterId: bigint, ratings: number[]) {
   }
 }
 
+async function addConfirmedQuotes(sitterId: bigint, count: number) {
+  const ownerSuffix = randomUUID();
+  const owner = await prisma.user.create({
+    data: {
+      email: `${PREFIX}-qowner-${ownerSuffix}@example.com`,
+      nickname: `${PREFIX}-qowner-${ownerSuffix}`,
+      passwordHash: "test-only",
+      role: "OWNER",
+      ownerProfile: { create: {} },
+    },
+  });
+
+  for (let i = 0; i < count; i++) {
+    const careRequest = await prisma.careRequest.create({
+      data: {
+        ownerId: owner.id,
+        serviceType: "SHORT_CARE",
+        startDate: futureDate(7),
+        endDate: futureDate(14),
+        zonecode: "04524",
+        address: "서울특별시 중구 세종대로 110",
+        sido: "서울특별시",
+        sigungu: "중구",
+        region: "SEOUL",
+        status: "MATCHED",
+      },
+    });
+    const quote = await prisma.quote.create({
+      data: {
+        careRequestId: careRequest.id,
+        sitterId,
+        type: "GENERAL",
+        price: 50000,
+        comment: "테스트 견적입니다. 꼼꼼히 돌봐드립니다.",
+      },
+    });
+    await prisma.careRequest.update({
+      where: { id: careRequest.id },
+      data: { confirmedQuoteId: quote.id },
+    });
+  }
+}
+
 // 이번 테스트의 팟트너만 대상으로 조회 (닉네임 접두사로 필터)
 function listMine(query: Record<string, unknown> = {}) {
   return getSitterList(validateSitterListQuery({ keyword: PREFIX, ...query }));
@@ -152,17 +198,17 @@ describe("팟트너 찾기 목록 조회", () => {
       assert.deepEqual(names.sort(), ["f-busan", "f-seoul"]);
     });
 
-    it("services는 하나라도 겹치면 포함한다", async () => {
+    it("serviceTypes는 하나라도 겹치면 포함한다", async () => {
       await createSitter({ name: "s-short", serviceTypes: ["SHORT_CARE"] });
       await createSitter({ name: "s-regular", serviceTypes: ["REGULAR_CARE"] });
 
-      const result = await listMine({ services: "REGULAR_CARE" });
+      const result = await listMine({ serviceTypes: "REGULAR_CARE" });
       const names = nicknamesOf(result).filter((n) => n.startsWith("s-"));
 
       assert.deepEqual(names, ["s-regular"]);
     });
 
-    it("gender 복수 선택을 지원한다", async () => {
+    it("gender로 한 성별만 조회한다", async () => {
       await createSitter({ name: "g-male", gender: "MALE" });
       await createSitter({ name: "g-female", gender: "FEMALE" });
 
@@ -170,9 +216,9 @@ describe("팟트너 찾기 목록 조회", () => {
       assert.ok(nicknamesOf(onlyMale).includes("g-male"));
       assert.ok(!nicknamesOf(onlyMale).includes("g-female"));
 
-      const both = await listMine({ gender: "MALE,FEMALE" });
-      assert.ok(nicknamesOf(both).includes("g-male"));
-      assert.ok(nicknamesOf(both).includes("g-female"));
+      const onlyFemale = await listMine({ gender: "FEMALE" });
+      assert.ok(nicknamesOf(onlyFemale).includes("g-female"));
+      assert.ok(!nicknamesOf(onlyFemale).includes("g-male"));
     });
 
     it("keyword는 닉네임 부분 일치이며 대소문자를 구분하지 않는다", async () => {
@@ -227,6 +273,72 @@ describe("팟트너 찾기 목록 조회", () => {
       assert.equal(result.items[0].averageRating, 4.7);
       assert.equal(result.items[0].reviewCount, 3);
     });
+
+    it("REVIEW_COUNT_DESC는 리뷰 많은 순, 같으면 평점 순, 그다음 userId 순이다", async () => {
+      const many = await createSitter({ name: "rc-many" });
+      const midHigh = await createSitter({ name: "rc-mid-high" });
+      const midLow = await createSitter({ name: "rc-mid-low" });
+      const few = await createSitter({ name: "rc-few" });
+      const tieA = await createSitter({ name: "rc-tie-a" });
+      const tieB = await createSitter({ name: "rc-tie-b" });
+
+      await addReviews(many, [3, 3, 3]);
+      await addReviews(midHigh, [5, 5]);
+      await addReviews(midLow, [4, 4]);
+      await addReviews(few, [5]);
+
+      const result = await listMine({
+        keyword: `${PREFIX}-rc-`,
+        sort: "REVIEW_COUNT_DESC",
+      });
+
+      assert.deepEqual(
+        result.items.map((item) => item.id),
+        [many, midHigh, midLow, few, tieA, tieB].map((id) => id.toString()),
+      );
+    });
+
+    it("CONFIRMED_QUOTE_COUNT_DESC는 확정 많은 순, 같으면 평점 → 리뷰 수 → userId 순이다", async () => {
+      const most = await createSitter({ name: "cq-most" });
+      const midHigh = await createSitter({ name: "cq-mid-high" });
+      const midLow = await createSitter({ name: "cq-mid-low" });
+      const none = await createSitter({ name: "cq-none" });
+
+      await addConfirmedQuotes(most, 3);
+      await addConfirmedQuotes(midHigh, 1);
+      await addConfirmedQuotes(midLow, 1);
+      await addReviews(midHigh, [5]);
+      await addReviews(midLow, [3]);
+      await addReviews(none, [5]);
+
+      const result = await listMine({
+        keyword: `${PREFIX}-cq-`,
+        sort: "CONFIRMED_QUOTE_COUNT_DESC",
+      });
+
+      assert.deepEqual(
+        result.items.map((item) => item.id),
+        [most, midHigh, midLow, none].map((id) => id.toString()),
+      );
+      assert.deepEqual(
+        result.items.map((item) => item.confirmedQuoteCount),
+        [3, 1, 1, 0],
+      );
+    });
+
+    it("sort를 생략하면 RATING_DESC로 정렬한다", async () => {
+      const low = await createSitter({ name: "def-low" });
+      const high = await createSitter({ name: "def-high" });
+      await addReviews(low, [3, 3, 3]);
+      await addReviews(high, [5]);
+
+      const result = await listMine({ keyword: `${PREFIX}-def-` });
+
+      assert.deepEqual(
+        result.items.map((item) => item.id),
+        [high, low].map((id) => id.toString()),
+      );
+    });
   });
 
   describe("페이지네이션", () => {
@@ -264,13 +376,22 @@ describe("팟트너 찾기 목록 조회", () => {
     const cases: Array<[string, Record<string, unknown>, string]> = [
       ["잘못된 gender", { gender: "ABC" }, "INVALID_GENDER"],
       ["잘못된 regions", { regions: "SEOUL,XXX" }, "INVALID_REGION"],
-      ["잘못된 services", { services: "LONG_CARE" }, "INVALID_SERVICE_TYPE"],
+      ["잘못된 serviceTypes", { serviceTypes: "LONG_CARE" }, "INVALID_SERVICE_TYPE"],
       ["pageSize 상한 초과", { pageSize: "101" }, "INVALID_PAGE_PARAMETER"],
       ["page 0", { page: "0" }, "INVALID_PAGE_PARAMETER"],
       ["page 문자", { page: "abc" }, "INVALID_PAGE_PARAMETER"],
       ["page 소수", { page: "1.5" }, "INVALID_PAGE_PARAMETER"],
       ["page 안전 정수 초과", { page: "9007199254740992" }, "INVALID_PAGE_PARAMETER"],
       ["page 앞자리 0", { page: "01" }, "INVALID_PAGE_PARAMETER"],
+      [
+        "serviceTypes 2개 선택",
+        { serviceTypes: "SHORT_CARE,REGULAR_CARE" },
+        "INVALID_SERVICE_TYPE",
+      ],
+      ["gender 2개 선택", { gender: "MALE,FEMALE" }, "INVALID_GENDER"],
+      ["regions 17개 선택", { regions: ALL_REGIONS.join(",") }, "INVALID_REGION"],
+      ["잘못된 sort", { sort: "foo" }, "INVALID_REQUEST"],
+      ["빈 문자열 sort", { sort: "" }, "INVALID_REQUEST"],
     ];
 
     for (const [title, query, code] of cases) {
@@ -287,6 +408,27 @@ describe("팟트너 찾기 목록 조회", () => {
       assert.equal(parsed.genders, undefined);
       assert.equal(parsed.page, 1);
       assert.equal(parsed.pageSize, 8);
+      assert.equal(parsed.sort, "RATING_DESC");
+    });
+
+    it("regions는 16개까지 선택할 수 있다", () => {
+      const sixteen = ALL_REGIONS.slice(0, 16);
+      const parsed = validateSitterListQuery({ regions: sixteen.join(",") });
+
+      assert.deepEqual(parsed.regions, sixteen);
+    });
+
+    it("serviceTypes와 gender는 1개까지 선택할 수 있다", () => {
+      const parsed = validateSitterListQuery({ serviceTypes: "SHORT_CARE", gender: "FEMALE" });
+
+      assert.deepEqual(parsed.serviceTypes, ["SHORT_CARE"]);
+      assert.deepEqual(parsed.genders, ["FEMALE"]);
+    });
+
+    it("같은 값을 반복해도 중복 제거 후 개수로 판단한다", () => {
+      const parsed = validateSitterListQuery({ serviceTypes: "SHORT_CARE,SHORT_CARE" });
+
+      assert.deepEqual(parsed.serviceTypes, ["SHORT_CARE"]);
     });
 
     it("값이 중복되어도 한 번만 적용한다", () => {
