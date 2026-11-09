@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import AppError from "../errors/app-error.js";
 import {
+  confirmQuoteService,
   createQuote,
   getQuoteDetail,
   getSentQuotes,
@@ -70,6 +71,24 @@ export async function updateQuoteController(req: Request, res: Response) {
   };
 
   res.status(200).json(serializeBigInt(quoteResponse));
+}
+
+// 팟오너의 견적 확정
+export async function confirmQuoteController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const ownerId = req.user.id;
+  const quoteId = parseBigId(req.params.quoteId);
+
+  if (quoteId === null) {
+    throw new AppError("INVALID_ID");
+  }
+
+  const confirmedQuote = await confirmQuoteService(ownerId, quoteId);
+
+  res.status(200).json(serializeBigInt(confirmedQuote));
 }
 
 // 팟오너·팟트너의 견적 상세 조회

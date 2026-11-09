@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  confirmQuoteController,
   getQuoteDetailController,
   getSentQuotesController,
   updateQuoteController,
@@ -7,6 +8,10 @@ import {
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
 export const quoteRouter = Router();
+
+// 팟오너
+// 견적 확정
+quoteRouter.patch("/:quoteId/confirm", authenticate, authorize("OWNER"), confirmQuoteController);
 
 // 팟오너·팟트너
 // 견적 상세 조회

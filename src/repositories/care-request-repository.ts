@@ -136,6 +136,27 @@ export function findSitterProfileWithRegions(sitterId: bigint, db: DbClient = pr
   });
 }
 
+// 견적 확정
+export function confirmCareRequest(
+  careRequestId: bigint,
+  ownerId: bigint,
+  quoteId: bigint,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.update({
+    where: {
+      id: careRequestId,
+      ownerId,
+      status: CareRequestStatus.OPEN,
+      AND: [{ confirmedQuoteId: null }],
+    },
+    data: {
+      confirmedQuoteId: quoteId,
+      status: CareRequestStatus.MATCHED,
+    },
+  });
+}
+
 // 팟트너 프로필 등록 여부 확인
 export function findSitterProfileIdByUserId(sitterId: bigint, db: DbClient = prisma) {
   return db.sitterProfile.findUnique({

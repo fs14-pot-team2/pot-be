@@ -2,6 +2,7 @@ import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
 import { CareRequestStatus } from "../generated/prisma/enums.js";
 import {
+  confirmCareRequest,
   findCareRequest,
   findSitterProfileIdByUserId,
   findSitterProfileWithRegions,
@@ -17,6 +18,7 @@ import {
   countSentQuotes,
   findQuote,
   findQuoteDetail,
+  findQuoteForConfirmation,
   findSentQuotes,
   insertQuote,
   updateQuote,
@@ -213,6 +215,106 @@ export async function updateQuoteService(
 
     if (refreshedRequest && refreshedRequest.status !== "OPEN") {
       throw new AppError("QUOTE_EDIT_NOT_ALLOWED");
+    }
+
+    throw error;
+  }
+}
+
+// 팟오너의 견적 확정
+export async function confirmQuoteService(
+  ownerId: bigint,
+  quoteId: bigint,
+  runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
+) {
+  const initialQuote = await findQuote(quoteId);
+
+  if (!initialQuote) {
+    throw new AppError("QUOTE_NOT_FOUND");
+  }
+
+  const careRequestId = initialQuote.careRequestId;
+
+  try {
+    const confirmedQuote = await runTransaction(async (tx) => {
+      await lockCareRequestForUpdate(careRequestId, tx);
+
+      const careRequest = await findCareRequest(careRequestId, tx);
+
+      if (!careRequest) {
+        throw new AppError("CARE_REQUEST_NOT_FOUND");
+      }
+
+      if (careRequest.ownerId !== ownerId) {
+        throw new AppError("FORBIDDEN");
+      }
+
+      if (careRequest.status === "MATCHED") {
+        if (careRequest.confirmedQuoteId === quoteId) {
+          throw new AppError("QUOTE_ALREADY_CONFIRMED");
+        }
+
+        throw new AppError("CARE_REQUEST_ALREADY_MATCHED");
+      }
+
+      if (careRequest.status !== "OPEN") {
+        throw new AppError("CARE_REQUEST_NOT_FOUND");
+      }
+
+      const wasExpired = await expireCareRequestIfPast(careRequest, tx);
+
+      if (wasExpired) {
+        return null;
+      }
+
+      const targetQuote = await findQuoteForConfirmation(quoteId, tx);
+
+      if (!targetQuote || targetQuote.careRequestId !== careRequestId) {
+        throw new AppError("QUOTE_NOT_FOUND");
+      }
+
+      const confirmedRequest = await confirmCareRequest(careRequestId, ownerId, quoteId, tx);
+
+      return {
+        quote: {
+          id: targetQuote.id,
+          careRequestId: targetQuote.careRequestId,
+          sitterId: targetQuote.sitterId,
+          type: targetQuote.type,
+          price: targetQuote.price,
+          comment: targetQuote.comment,
+        },
+        careRequest: {
+          id: confirmedRequest.id,
+          status: confirmedRequest.status,
+          confirmedQuoteId: confirmedRequest.confirmedQuoteId,
+          updatedAt: confirmedRequest.updatedAt,
+        },
+      };
+    });
+
+    if (!confirmedQuote) {
+      throw new AppError("CARE_REQUEST_NOT_FOUND");
+    }
+
+    return confirmedQuote;
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "P2025")) {
+      throw error;
+    }
+
+    const refreshedRequest = await findCareRequest(careRequestId);
+
+    if (refreshedRequest && refreshedRequest.status === "MATCHED") {
+      if (refreshedRequest.confirmedQuoteId === quoteId) {
+        throw new AppError("QUOTE_ALREADY_CONFIRMED");
+      }
+
+      throw new AppError("CARE_REQUEST_ALREADY_MATCHED");
+    }
+
+    if (refreshedRequest && refreshedRequest.status !== "OPEN") {
+      throw new AppError("CARE_REQUEST_NOT_FOUND");
     }
 
     throw error;

@@ -46,6 +46,21 @@ export function findQuote(quoteId: bigint, db: DbClient = prisma) {
   });
 }
 
+// 견적 확정을 위한 조회
+export function findQuoteForConfirmation(quoteId: bigint, db: DbClient = prisma) {
+  return db.quote.findUnique({
+    where: { id: quoteId },
+    select: {
+      id: true,
+      careRequestId: true,
+      sitterId: true,
+      type: true,
+      price: true,
+      comment: true,
+    },
+  });
+}
+
 // 견적 수정
 export function updateQuote(
   quoteId: bigint,
