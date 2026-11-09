@@ -4,6 +4,8 @@ import { validateUpdateMe, validateVerifyPassword } from "../validators/user-val
 import AppError from "../errors/app-error.js";
 import * as userService from "../services/user-service.js";
 import { serializeBigInt } from "../utils/bigint.js";
+import { clearReauthCookie, setReauthCookie } from "../utils/auth-cookie.js";
+import { signReauthToken } from "../utils/jwt.js";
 
 export async function getMe(req: Request, res: Response, next: NextFunction) {
   try {
@@ -20,6 +22,7 @@ export async function verifyPassword(req: Request, res: Response, next: NextFunc
     if (!req.user) throw new AppError("UNAUTHORIZED");
     const { password } = validateVerifyPassword(req.body);
     const result = await userService.verifyMyPassword(req.user.id, password);
+    setReauthCookie(res, signReauthToken(req.user.id.toString()));
     res.status(200).json(serializeBigInt(result));
   } catch (error) {
     next(error);
@@ -31,6 +34,7 @@ export async function updateMe(req: Request, res: Response, next: NextFunction) 
     if (!req.user) throw new AppError("UNAUTHORIZED");
     const input = validateUpdateMe(req.body);
     const result = await userService.updateMe(req.user.id, input);
+    clearReauthCookie(res);
     res.status(200).json(serializeBigInt(result));
   } catch (error) {
     next(error);

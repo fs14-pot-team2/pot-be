@@ -5,6 +5,8 @@ import { env } from "../config/env.js";
 import AppError from "../errors/app-error.js";
 import { isUserRole, type AuthUser, type UserRole } from "../types/auth.js";
 import { parseBigId } from "../utils/bigint.js";
+import { getReauthTokenFromCookie } from "../utils/auth-cookie.js";
+import { verifyReauthToken } from "../utils/jwt.js";
 
 function parseAuthUser(payload: jwt.JwtPayload): AuthUser | null {
   const { sub, role } = payload;
@@ -83,4 +85,23 @@ export function authorize(...roles: UserRole[]) {
     }
     next();
   };
+}
+
+// 개인정보 수정 전 비밀번호 재인증 쿠키 검증 (authenticate 뒤에 사용)
+export function requireReauth(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user) {
+    return next(new AppError("UNAUTHORIZED"));
+  }
+
+  try {
+    const token = getReauthTokenFromCookie(req);
+    const userId = token ? verifyReauthToken(token) : null;
+
+    if (userId === null || userId !== req.user.id.toString()) {
+      return next(new AppError("REAUTHENTICATION_REQUIRED"));
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
