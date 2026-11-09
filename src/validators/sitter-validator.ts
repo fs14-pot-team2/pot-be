@@ -1,7 +1,7 @@
 import AppError from "../errors/app-error.js";
 import type { ErrorCode } from "../errors/error-definitions.js";
 import { Gender, Region, ServiceType } from "../generated/prisma/enums.js";
-import type { SitterListQuery } from "../types/sitter.js";
+import { SITTER_SORTS, type SitterListQuery, type SitterSort } from "../types/sitter.js";
 import { parseBigId } from "../utils/bigint.js";
 
 import { validatePagination } from "./pagination-validator.js";
@@ -42,11 +42,24 @@ export function validateSitterListQuery(query: Record<string, unknown>): SitterL
   return {
     keyword,
     regions: parseEnumList(query.regions, Object.values(Region), "INVALID_REGION"),
-    services: parseEnumList(query.services, Object.values(ServiceType), "INVALID_SERVICE_TYPE"),
+    serviceTypes: parseEnumList(
+      query.serviceTypes,
+      Object.values(ServiceType),
+      "INVALID_SERVICE_TYPE",
+    ),
     genders: parseEnumList(query.gender, Object.values(Gender), "INVALID_GENDER"),
+    sort: parseSort(query.sort),
     page,
     pageSize,
   };
+}
+
+function parseSort(raw: unknown): SitterSort {
+  if (raw === undefined) return "RATING_DESC";
+  if (typeof raw !== "string" || !(SITTER_SORTS as readonly string[]).includes(raw)) {
+    throw new AppError("INVALID_REQUEST");
+  }
+  return raw as SitterSort;
 }
 
 export function validateSitterIdParam(value: unknown): bigint {

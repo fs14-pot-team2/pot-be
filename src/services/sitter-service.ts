@@ -8,6 +8,7 @@ import {
 import {
   DESIGNATED_REQUEST_STATUS,
   type SitterListQuery,
+  type SitterSort,
   type SitterViewer,
 } from "../types/sitter.js";
 import { getActiveCareRequest } from "./care-request-service.js";
@@ -16,22 +17,29 @@ import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 const MAX_DESIGNATED_REQUESTS = 3;
 
+type SortAggregate = { averageRating: number; reviewCount: number; confirmedQuoteCount: number };
+
+const SORT_COMPARATORS: Record<SitterSort, (x: SortAggregate, y: SortAggregate) => number> = {
+  RATING_DESC: (x, y) => y.averageRating - x.averageRating || y.reviewCount - x.reviewCount,
+  REVIEW_COUNT_DESC: (x, y) => y.reviewCount - x.reviewCount || y.averageRating - x.averageRating,
+  CONFIRMED_QUOTE_COUNT_DESC: (x, y) =>
+    y.confirmedQuoteCount - x.confirmedQuoteCount ||
+    y.averageRating - x.averageRating ||
+    y.reviewCount - x.reviewCount,
+};
+
 export async function getSitterList(query: SitterListQuery) {
-  const { page, pageSize, ...filter } = query;
+  const { page, pageSize, sort, ...filter } = query;
 
   const userIds = await findSitterUserIdsByFilter(filter);
   const aggregates = await getSitterAggregates(userIds);
 
-  // 평점 ↓ → 리뷰 수 ↓ → userId ↑ (동점이어도 순서 고정)
-  const sortedIds = [...userIds].sort((a, b) => {
-    const x = aggregates.get(a)!;
-    const y = aggregates.get(b)!;
-    return (
-      y.averageRating - x.averageRating ||
-      y.reviewCount - x.reviewCount ||
-      (a < b ? -1 : a > b ? 1 : 0)
-    );
-  });
+  const compare = SORT_COMPARATORS[sort];
+
+  // 동점이어도 순서 고정: userId 오름차순
+  const sortedIds = [...userIds].sort(
+    (a, b) => compare(aggregates.get(a)!, aggregates.get(b)!) || (a < b ? -1 : a > b ? 1 : 0),
+  );
 
   const totalCount = sortedIds.length;
   const pageIds = sortedIds.slice((page - 1) * pageSize, page * pageSize);
