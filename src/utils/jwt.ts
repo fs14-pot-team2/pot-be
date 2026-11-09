@@ -8,8 +8,8 @@ const ACCESS_TOKEN_EXPIRES_IN = "30m";
 const REFRESH_TOKEN_EXPIRES_IN = "7d";
 export const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-const REAUTH_TOKEN_EXPIRES_IN = "5m";
-export const REAUTH_TOKEN_MAX_AGE_MS = 5 * 60 * 1000;
+export const REAUTH_TOKEN_EXPIRES_IN_SECONDS = 3 * 60;
+export const REAUTH_TOKEN_MAX_AGE_MS = REAUTH_TOKEN_EXPIRES_IN_SECONDS * 1000;
 const REAUTH_PURPOSE = "profile-update";
 
 export type TokenPayload = { sub: string; role: UserRole };
@@ -51,7 +51,7 @@ export function verifyRefreshToken(token: string): TokenPayload | null {
 export function signReauthToken(userId: string) {
   return jwt.sign({ sub: userId, purpose: REAUTH_PURPOSE }, env.jwtReauthSecret, {
     algorithm: "HS256",
-    expiresIn: REAUTH_TOKEN_EXPIRES_IN,
+    expiresIn: REAUTH_TOKEN_EXPIRES_IN_SECONDS,
   });
 }
 

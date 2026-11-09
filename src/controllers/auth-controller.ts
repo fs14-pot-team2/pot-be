@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import AppError from "../errors/app-error.js";
 import * as authService from "../services/auth-service.js";
 import {
+  clearReauthCookie,
   clearRefreshTokenCookie,
   getRefreshTokenFromCookie,
   setRefreshTokenCookie,
@@ -45,6 +46,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
 export function logout(_req: Request, res: Response) {
   clearRefreshTokenCookie(res);
+  clearReauthCookie(res);
   res.status(200).json({ message: "로그아웃되었습니다." });
 }
 

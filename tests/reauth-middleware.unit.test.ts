@@ -7,7 +7,13 @@ import jwt from "jsonwebtoken";
 import { env } from "../src/config/env.js";
 import AppError from "../src/errors/app-error.js";
 import { requireReauth } from "../src/middlewares/auth-middleware.js";
-import { signAccessToken, signReauthToken, verifyReauthToken } from "../src/utils/jwt.js";
+import {
+  REAUTH_TOKEN_EXPIRES_IN_SECONDS,
+  REAUTH_TOKEN_MAX_AGE_MS,
+  signAccessToken,
+  signReauthToken,
+  verifyReauthToken,
+} from "../src/utils/jwt.js";
 
 const USER_ID = 100n;
 
@@ -67,7 +73,7 @@ describe("재인증 토큰 검증 미들웨어", () => {
     const token = jwt.sign(
       { sub: USER_ID.toString(), purpose: "profile-update" },
       `${env.jwtReauthSecret}-forged`,
-      { algorithm: "HS256", expiresIn: "5m" },
+      { algorithm: "HS256", expiresIn: "3m" },
     );
 
     assertReauthRequired(runMiddleware(createRequest({ userId: USER_ID, token })));
@@ -76,7 +82,7 @@ describe("재인증 토큰 검증 미들웨어", () => {
   it("purpose가 다른 토큰이면 REAUTHENTICATION_REQUIRED를 반환한다", () => {
     const token = jwt.sign({ sub: USER_ID.toString(), purpose: "other" }, env.jwtReauthSecret, {
       algorithm: "HS256",
-      expiresIn: "5m",
+      expiresIn: "3m",
     });
 
     assertReauthRequired(runMiddleware(createRequest({ userId: USER_ID, token })));
@@ -109,9 +115,16 @@ describe("재인증 토큰 유틸", () => {
   it("sub가 BigInt로 변환되지 않으면 null을 반환한다", () => {
     const token = jwt.sign({ sub: "abc", purpose: "profile-update" }, env.jwtReauthSecret, {
       algorithm: "HS256",
-      expiresIn: "5m",
+      expiresIn: "3m",
     });
 
     assert.equal(verifyReauthToken(token), null);
+  });
+
+  it("재인증 토큰은 3분 뒤 만료되고 쿠키 maxAge와 일치한다", () => {
+    const decoded = jwt.decode(signReauthToken("42")) as { iat: number; exp: number };
+
+    assert.equal(decoded.exp - decoded.iat, REAUTH_TOKEN_EXPIRES_IN_SECONDS);
+    assert.equal(REAUTH_TOKEN_MAX_AGE_MS, REAUTH_TOKEN_EXPIRES_IN_SECONDS * 1000);
   });
 });
