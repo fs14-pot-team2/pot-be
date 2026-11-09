@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  cancelCareRequestController,
   createCareRequestController,
   getActiveCareRequestController,
   getOpenCareRequestQuotesController,
@@ -45,6 +46,14 @@ careRequestRouter.patch(
   authenticate,
   authorize("OWNER"),
   updateCareRequestController,
+);
+
+// 돌봄 요청 취소
+careRequestRouter.patch(
+  "/:careRequestId/cancel",
+  authenticate,
+  authorize("OWNER"),
+  cancelCareRequestController,
 );
 
 // 지정 요청 생성

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import AppError from "../errors/app-error.js";
 import {
+  cancelCareRequestService,
   createCareRequest,
   getActiveCareRequest,
   getOpenCareRequestQuotes,
@@ -113,6 +114,30 @@ export async function updateCareRequestController(req: Request, res: Response) {
     region: updatedCareRequest.region,
     status: updatedCareRequest.status,
     updatedAt: updatedCareRequest.updatedAt,
+  };
+
+  res.status(200).json(serializeBigInt(careRequestResponse));
+}
+
+// 팟오너의 돌봄 요청 취소
+export async function cancelCareRequestController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const ownerId = req.user.id;
+  const careRequestId = parseBigId(req.params.careRequestId);
+
+  if (careRequestId === null) {
+    throw new AppError("INVALID_ID");
+  }
+
+  const canceledRequest = await cancelCareRequestService(ownerId, careRequestId);
+
+  const careRequestResponse = {
+    id: canceledRequest.id,
+    status: canceledRequest.status,
+    canceledAt: canceledRequest.canceledAt,
   };
 
   res.status(200).json(serializeBigInt(careRequestResponse));
