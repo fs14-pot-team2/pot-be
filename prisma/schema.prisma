@@ -205,6 +205,8 @@ model Conversation {
   messages      Message[]
 
   @@unique([ownerId, sitterId])
+  @@index([ownerId, lastMessageAt])
+  @@index([sitterId, lastMessageAt])
 }
 
 model Message {
@@ -216,6 +218,9 @@ model Message {
   content        String
   readAt         DateTime?
   createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt, id])
+  @@index([conversationId, readAt])
 }
 
 model Review {
