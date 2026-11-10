@@ -380,6 +380,13 @@ export const ERROR_DEFINITIONS = {
     message: "대화방을 찾을 수 없습니다.",
     statusCode: 404,
   },
+
+  // 알림
+  NOTIFICATION_NOT_FOUND: {
+    code: "NOTIFICATION_NOT_FOUND",
+    message: "알림을 찾을 수 없습니다.",
+    statusCode: 404,
+  },
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_DEFINITIONS;
