@@ -490,6 +490,7 @@ export async function getSentQuotes(
     quote: {
       id: quote.id,
       price: quote.price,
+      comment: quote.comment,
       createdAt: quote.createdAt,
     },
     designatedRequestId: quote.careRequest.designatedRequests[0]?.id ?? null,
