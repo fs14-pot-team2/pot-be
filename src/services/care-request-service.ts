@@ -8,6 +8,7 @@ import {
   countReceivedCareRequests,
   expireReceivedCareRequests,
   findCareRequest,
+  findCareRequestHistory,
   findCareRequestQuotesHistoryByOwner,
   findOpenCareRequest,
   findOpenCareRequestQuotes,
@@ -504,6 +505,14 @@ export async function getCareRequestQuotesHistoryByOwner(
   ownerId: bigint,
   query: CareRequestQuotesHistoryQuery,
 ) {
+  if (query.cursor !== null) {
+    const careRequestHistory = await findCareRequestHistory(ownerId, query.cursor);
+
+    if (!careRequestHistory) {
+      throw new AppError("INVALID_PAGE_PARAMETER");
+    }
+  }
+
   const careRequests = await findCareRequestQuotesHistoryByOwner(ownerId, query);
 
   const hasNext = careRequests.length > query.limit;

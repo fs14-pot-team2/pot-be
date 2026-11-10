@@ -166,6 +166,44 @@ describe("받았던 견적 이력 목록 조회", () => {
     });
   });
 
+  describe("커서 대상 검증", () => {
+    // 존재하지 않는 돌봄 요청 ID를 커서로 전달하면 페이지네이션 오류 반환
+    it("존재하지 않는 커서는 INVALID_PAGE_PARAMETER를 반환한다", async () => {
+      const { ownerId } = await createTestRequest();
+
+      const careRequest = await prisma.careRequest.findFirst({
+        orderBy: { id: "desc" },
+        select: { id: true },
+      });
+
+      const nonexistentId = careRequest!.id + 1n;
+
+      await assert.rejects(
+        getCareRequestQuotesHistoryByOwner(ownerId, {
+          cursor: nonexistentId,
+          limit: 4,
+          status: null,
+        }),
+        assertAppError("INVALID_PAGE_PARAMETER", 400),
+      );
+    });
+
+    // 다른 팟오너가 소유한 돌봄 요청 ID를 커서로 전달하면 페이지네이션 오류 반환
+    it("다른 팟오너 소유 커서는 INVALID_PAGE_PARAMETER를 반환한다", async () => {
+      const { ownerId } = await createTestRequest();
+      const { careRequestId } = await createTestRequest();
+
+      await assert.rejects(
+        getCareRequestQuotesHistoryByOwner(ownerId, {
+          cursor: careRequestId,
+          limit: 4,
+          status: null,
+        }),
+        assertAppError("INVALID_PAGE_PARAMETER", 400),
+      );
+    });
+  });
+
   describe("팟트너 프로필 정합성", () => {
     // 견적 작성자의 팟트너 프로필이 없으면 데이터 정합성 오류를 반환하는지 확인
     it("견적 작성자의 팟트너 프로필이 없으면 정합성 오류를 반환한다", async () => {

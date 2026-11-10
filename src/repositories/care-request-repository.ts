@@ -317,6 +317,23 @@ export function findOpenCareRequestQuotes(ownerId: bigint, db: DbClient = prisma
   });
 }
 
+// 팟오너의 돌봄 요청 이력 커서 대상 조회
+export function findCareRequestHistory(
+  ownerId: bigint,
+  careRequestId: bigint,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.findFirst({
+    where: {
+      id: careRequestId,
+      ownerId,
+    },
+    select: {
+      id: true,
+    },
+  });
+}
+
 // 팟오너의 돌봄 요청 이력과 해당 요청에 받은 견적 및 반려 조회
 export function findCareRequestQuotesHistoryByOwner(
   ownerId: bigint,
