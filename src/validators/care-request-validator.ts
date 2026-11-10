@@ -3,7 +3,7 @@ import AppError from "../errors/app-error.js";
 import { parseBigId } from "../utils/bigint.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 import { toRegion } from "../utils/region.js";
-import { validatePagination } from "./pagination-validator.js";
+import { validateCursorQuery, validatePagination } from "./pagination-validator.js";
 
 export interface CreateCareRequestInput {
   serviceType: ServiceType;
@@ -305,21 +305,7 @@ export type CareRequestQuotesHistoryQuery = {
 export function validateCareRequestQuotesHistoryQuery(
   query: Record<string, unknown>,
 ): CareRequestQuotesHistoryQuery {
-  let cursor: bigint | null = null;
-
-  if (query.cursor !== undefined) {
-    cursor = parseBigId(query.cursor);
-
-    if (cursor === null) {
-      throw new AppError("INVALID_PAGE_PARAMETER");
-    }
-  }
-
-  const { pageSize: limit } = validatePagination(undefined, query.limit, 4);
-
-  if (limit > 50) {
-    throw new AppError("INVALID_PAGE_PARAMETER");
-  }
+  const { cursor, limit } = validateCursorQuery(query, 4, 50);
 
   const status = query.status ?? null;
 
