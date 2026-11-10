@@ -54,6 +54,23 @@ enum QuoteType {
   DESIGNATED
 }
 
+enum NotificationType {
+  QUOTE_RECEIVED
+  QUOTE_UPDATED
+  DESIGNATED_REQUEST_REJECTED
+  OWNER_CARE_STARTED
+  OWNER_CARE_ENDING
+  REVIEW_AVAILABLE
+  CARE_REQUEST_EXPIRING
+  DESIGNATED_REQUEST_RECEIVED
+  QUOTE_CONFIRMED
+  REVIEW_RECEIVED
+  CARE_REQUEST_CANCELED
+  CARE_REQUEST_EXPIRED
+  SITTER_CARE_STARTED
+  SITTER_CARE_ENDING
+}
+
 model User {
   id                  BigInt              @id @default(autoincrement())
   nickname            String
@@ -73,6 +90,7 @@ model User {
   messages            Message[]
   writtenReviews      Review[]            @relation("OwnerReviews")
   receivedReviews     Review[]            @relation("SitterReviews")
+  notifications       Notification[]
 
   @@unique([nickname, role])
   @@unique([email, role])
@@ -145,6 +163,7 @@ model CareRequest {
   ignoredRequests    IgnoredRequest[]
   quotes             Quote[]             @relation("CareRequestQuotes")
   review             Review?
+  notifications      Notification[]
 }
 
 model DesignatedRequest {
@@ -155,6 +174,7 @@ model DesignatedRequest {
   sitter          User             @relation(fields: [sitterId], references: [id])
   createdAt       DateTime         @default(now())
   rejectedRequest RejectedRequest?
+  notifications   Notification[]
 
   @@unique([careRequestId, sitterId])
 }
@@ -190,6 +210,7 @@ model Quote {
   comment            String
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
+  notifications      Notification[]
 
   @@unique([careRequestId, sitterId])
 }
@@ -235,4 +256,26 @@ model Review {
   content       String
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  notifications Notification[]
+}
+
+model Notification {
+  id                  BigInt             @id @default(autoincrement())
+  recipientId         BigInt
+  recipient           User               @relation(fields: [recipientId], references: [id])
+  careRequestId       BigInt
+  careRequest         CareRequest        @relation(fields: [careRequestId], references: [id])
+  quoteId             BigInt?
+  quote               Quote?             @relation(fields: [quoteId], references: [id])
+  designatedRequestId BigInt?
+  designatedRequest   DesignatedRequest? @relation(fields: [designatedRequestId], references: [id])
+  reviewId            BigInt?
+  review              Review?            @relation(fields: [reviewId], references: [id])
+  type                NotificationType
+  message             String
+  readAt              DateTime?
+  createdAt           DateTime           @default(now())
+
+  @@index([recipientId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([recipientId, readAt])
 }
