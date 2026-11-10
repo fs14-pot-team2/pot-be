@@ -31,10 +31,10 @@ interface MessageRow {
 
 function toMessageDto(message: MessageRow) {
   return {
-    id: message.id.toString(),
-    senderId: message.senderId.toString(),
+    id: message.id,
+    senderId: message.senderId,
     content: message.content,
-    createdAt: message.createdAt.toISOString(),
+    createdAt: message.createdAt,
   };
 }
 
@@ -90,17 +90,17 @@ export async function getConversations(userId: bigint, cursor: bigint | null, li
             };
 
       return {
-        conversationId: row.id.toString(),
+        conversationId: row.id,
         otherUser: {
-          id: other.id.toString(),
+          id: other.id,
           nickname: other.nickname,
           profileImageUrl: other.profileImageUrl,
         },
-        lastMessageAt: row.lastMessageAt.toISOString(),
+        lastMessageAt: row.lastMessageAt,
         hasUnreadMessage: unreadIds.has(row.id),
       };
     }),
-    nextCursor: hasNextPage ? page[page.length - 1]!.id.toString() : null,
+    nextCursor: hasNextPage ? page[page.length - 1]!.id : null,
     hasNextPage,
   };
 }
@@ -128,11 +128,11 @@ export async function getMessages(
   const page = hasNextPage ? rows.slice(0, limit) : rows;
 
   return {
-    conversationId: conversation.id.toString(),
+    conversationId: conversation.id,
     // 조회는 최신순이라 화면 표시 순서(오래된 순)로 뒤집는다
     items: [...page].reverse().map(toMessageDto),
     // 이번 구간에서 가장 오래된 쪽지 ID. 위로 스크롤할 때 이 값을 cursor로 보낸다
-    nextCursor: hasNextPage ? page[page.length - 1]!.id.toString() : null,
+    nextCursor: hasNextPage ? page[page.length - 1]!.id : null,
     hasNextPage,
   };
 }
@@ -196,7 +196,7 @@ export async function sendMessage(
   }
 
   return {
-    conversationId: result.conversationId.toString(),
+    conversationId: result.conversationId,
     message: toMessageDto(result.message),
   };
 }
