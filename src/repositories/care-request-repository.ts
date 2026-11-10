@@ -3,6 +3,7 @@ import type { Prisma } from "../generated/prisma/client.js";
 import { CareRequestStatus, type Region } from "../generated/prisma/enums.js";
 import type { DbClient } from "../types/db.js";
 import type {
+  CareRequestQuotesHistoryQuery,
   CreateCareRequestInput,
   UpdateCareRequestInput,
 } from "../validators/care-request-validator.js";
@@ -284,6 +285,63 @@ export function findOpenCareRequestQuotes(ownerId: bigint, db: DbClient = prisma
     },
     select: {
       id: true,
+      createdAt: true,
+      serviceType: true,
+      startDate: true,
+      endDate: true,
+      sido: true,
+      sigungu: true,
+      bname: true,
+      quotes: {
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: {
+          id: true,
+          sitterId: true,
+          price: true,
+          createdAt: true,
+        },
+      },
+      designatedRequests: {
+        select: {
+          id: true,
+          sitterId: true,
+          rejectedRequest: {
+            select: {
+              id: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+// 팟오너의 돌봄 요청 이력과 해당 요청에 받은 견적 및 반려 조회
+export function findCareRequestQuotesHistoryByOwner(
+  ownerId: bigint,
+  query: CareRequestQuotesHistoryQuery,
+  db: DbClient = prisma,
+) {
+  const { cursor, limit, status } = query;
+
+  return db.careRequest.findMany({
+    where: {
+      ownerId,
+      status: status ?? {
+        in: [CareRequestStatus.MATCHED, CareRequestStatus.EXPIRED],
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    ...(cursor !== null && {
+      cursor: { id: cursor },
+      skip: 1,
+    }),
+    select: {
+      id: true,
+      status: true,
+      confirmedQuoteId: true,
       createdAt: true,
       serviceType: true,
       startDate: true,

@@ -8,6 +8,7 @@ import {
   countReceivedCareRequests,
   expireReceivedCareRequests,
   findCareRequest,
+  findCareRequestQuotesHistoryByOwner,
   findOpenCareRequest,
   findOpenCareRequestQuotes,
   findQuoteByCareRequestId,
@@ -27,6 +28,7 @@ import { toRegion } from "../utils/region.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import {
   validateUpdatedCareDates,
+  type CareRequestQuotesHistoryQuery,
   type CreateCareRequestInput,
   type UpdateCareRequestInput,
   type ReceivedCareRequestsQuery,
@@ -494,5 +496,148 @@ export async function getOpenCareRequestQuotes(ownerId: bigint) {
       createdAt: rejectedRequest.createdAt,
       sitter: buildSitterResponse(rejectedRequest.sitterId),
     })),
+  };
+}
+
+// 팟오너의 돌봄 요청 이력과 해당 요청에 받은 견적 및 반려 조회
+export async function getCareRequestQuotesHistoryByOwner(
+  ownerId: bigint,
+  query: CareRequestQuotesHistoryQuery,
+) {
+  const careRequests = await findCareRequestQuotesHistoryByOwner(ownerId, query);
+
+  const hasNext = careRequests.length > query.limit;
+  const paginatedCareRequests = careRequests.slice(0, query.limit);
+
+  // 돌봄 요청별 지정 요청 관계 및 반려 이력 구성
+  const careRequestQuoteOverviews = paginatedCareRequests.map((careRequest) => {
+    const designatedRequestIdBySitterId = new Map(
+      careRequest.designatedRequests.map((designatedRequest) => [
+        designatedRequest.sitterId,
+        designatedRequest.id,
+      ]),
+    );
+
+    const rejectedDesignatedRequests = careRequest.designatedRequests
+      .flatMap((designatedRequest) => {
+        const rejectedRequest = designatedRequest.rejectedRequest;
+
+        if (!rejectedRequest) {
+          return [];
+        }
+
+        return [
+          {
+            designatedRequestId: designatedRequest.id,
+            sitterId: designatedRequest.sitterId,
+            rejectedRequestId: rejectedRequest.id,
+            createdAt: rejectedRequest.createdAt,
+          },
+        ];
+      })
+      .sort((firstRejectedRequest, secondRejectedRequest) => {
+        const createdAtDifference =
+          secondRejectedRequest.createdAt.getTime() - firstRejectedRequest.createdAt.getTime();
+
+        if (createdAtDifference !== 0) {
+          return createdAtDifference;
+        }
+
+        if (firstRejectedRequest.rejectedRequestId > secondRejectedRequest.rejectedRequestId) {
+          return -1;
+        }
+
+        if (firstRejectedRequest.rejectedRequestId < secondRejectedRequest.rejectedRequestId) {
+          return 1;
+        }
+
+        return 0;
+      });
+
+    return {
+      careRequest,
+      designatedRequestIdBySitterId,
+      rejectedDesignatedRequests,
+    };
+  });
+
+  // 견적 제출자와 반려 팟트너의 ID를 중복 없이 수집
+  const sitterIds = [
+    ...new Set([
+      ...careRequestQuoteOverviews.flatMap(({ careRequest }) =>
+        careRequest.quotes.map((quote) => quote.sitterId),
+      ),
+      ...careRequestQuoteOverviews.flatMap(({ rejectedDesignatedRequests }) =>
+        rejectedDesignatedRequests.map((rejectedRequest) => rejectedRequest.sitterId),
+      ),
+    ]),
+  ];
+
+  // 팟트너 프로필 및 파생데이터 일괄 조회
+  const [sitterProfiles, sitterAggregates] = await Promise.all([
+    findSitterProfilesForQuotes(sitterIds),
+    getSitterAggregates(sitterIds),
+  ]);
+
+  const sitterProfileByUserId = new Map(
+    sitterProfiles.map((sitterProfile) => [sitterProfile.userId, sitterProfile]),
+  );
+
+  function buildSitterResponse(sitterId: bigint) {
+    const sitterProfile = sitterProfileByUserId.get(sitterId);
+
+    if (!sitterProfile) {
+      throw new AppError("SITTER_PROFILE_INCONSISTENT");
+    }
+
+    const sitterAggregate = sitterAggregates.get(sitterId);
+
+    return {
+      id: sitterId,
+      nickname: sitterProfile.user.nickname,
+      profileImageUrl: sitterProfile.profileImageUrl,
+      gender: sitterProfile.gender,
+      shortIntroduction: sitterProfile.shortIntroduction,
+      averageRating: sitterAggregate?.averageRating ?? 0,
+      reviewCount: sitterAggregate?.reviewCount ?? 0,
+      confirmedQuoteCount: sitterAggregate?.confirmedQuoteCount ?? 0,
+    };
+  }
+
+  // 돌봄 요청별 견적·반려 응답 구성
+  const items = careRequestQuoteOverviews.map(
+    ({ careRequest, designatedRequestIdBySitterId, rejectedDesignatedRequests }) => ({
+      careRequest: {
+        id: careRequest.id,
+        status: careRequest.status,
+        confirmedQuoteId: careRequest.confirmedQuoteId,
+        createdAt: careRequest.createdAt,
+        serviceType: careRequest.serviceType,
+        startDate: serializeDate(careRequest.startDate),
+        endDate: serializeDate(careRequest.endDate),
+        sido: careRequest.sido,
+        sigungu: careRequest.sigungu,
+        bname: careRequest.bname,
+      },
+      quotes: careRequest.quotes.map((quote) => ({
+        id: quote.id,
+        designatedRequestId: designatedRequestIdBySitterId.get(quote.sitterId) ?? null,
+        price: quote.price,
+        createdAt: quote.createdAt,
+        sitter: buildSitterResponse(quote.sitterId),
+      })),
+      rejectedRequests: rejectedDesignatedRequests.map((rejectedRequest) => ({
+        rejectedRequestId: rejectedRequest.rejectedRequestId,
+        designatedRequestId: rejectedRequest.designatedRequestId,
+        createdAt: rejectedRequest.createdAt,
+        sitter: buildSitterResponse(rejectedRequest.sitterId),
+      })),
+    }),
+  );
+
+  return {
+    items,
+    nextCursor: hasNext ? paginatedCareRequests[paginatedCareRequests.length - 1]!.id : null,
+    hasNext,
   };
 }
