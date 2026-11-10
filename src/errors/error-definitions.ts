@@ -348,6 +348,38 @@ export const ERROR_DEFINITIONS = {
     message: "아직 리뷰를 작성할 수 없습니다.",
     statusCode: 409,
   },
+
+  // 쪽지
+  INVALID_MESSAGE_CONTENT: {
+    code: "INVALID_MESSAGE_CONTENT",
+    message: "쪽지 내용은 공백을 제외하고 10자 이상 1000자 이하로 입력해주세요.",
+    statusCode: 400,
+  },
+  INVALID_MESSAGE_RECEIVER: {
+    code: "INVALID_MESSAGE_RECEIVER",
+    message: "쪽지를 보낼 수 없는 대상입니다.",
+    statusCode: 400,
+  },
+  MESSAGE_START_FORBIDDEN: {
+    code: "MESSAGE_START_FORBIDDEN",
+    message: "최초 쪽지는 본인의 진행 중인 돌봄 요청에 견적을 보낸 팟트너에게만 보낼 수 있습니다.",
+    statusCode: 403,
+  },
+  USER_NOT_FOUND: {
+    code: "USER_NOT_FOUND",
+    message: "사용자를 찾을 수 없습니다.",
+    statusCode: 404,
+  },
+  CONVERSATION_ACCESS_FORBIDDEN: {
+    code: "CONVERSATION_ACCESS_FORBIDDEN",
+    message: "해당 대화방에 접근할 권한이 없습니다.",
+    statusCode: 403,
+  },
+  CONVERSATION_NOT_FOUND: {
+    code: "CONVERSATION_NOT_FOUND",
+    message: "대화방을 찾을 수 없습니다.",
+    statusCode: 404,
+  },
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_DEFINITIONS;
