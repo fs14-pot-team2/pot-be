@@ -1,5 +1,6 @@
 import { ServiceType, Region } from "../generated/prisma/enums.js";
 import AppError from "../errors/app-error.js";
+import { parseBigId } from "../utils/bigint.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 import { toRegion } from "../utils/region.js";
 import { validatePagination } from "./pagination-validator.js";
@@ -291,5 +292,44 @@ export function validateReceivedCareRequestsQuery(
     regions,
     keyword,
     sort,
+  };
+}
+
+export type CareRequestQuotesHistoryQuery = {
+  cursor: bigint | null;
+  limit: number;
+  status: "MATCHED" | "EXPIRED" | null;
+};
+
+// 팟오너의 받았던 견적 이력 목록 조회 입력값 검증
+export function validateCareRequestQuotesHistoryQuery(
+  query: Record<string, unknown>,
+): CareRequestQuotesHistoryQuery {
+  let cursor: bigint | null = null;
+
+  if (query.cursor !== undefined) {
+    cursor = parseBigId(query.cursor);
+
+    if (cursor === null) {
+      throw new AppError("INVALID_PAGE_PARAMETER");
+    }
+  }
+
+  const { pageSize: limit } = validatePagination(undefined, query.limit, 4);
+
+  if (limit > 50) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
+  const status = query.status ?? null;
+
+  if (status !== null && status !== "MATCHED" && status !== "EXPIRED") {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  return {
+    cursor,
+    limit,
+    status,
   };
 }

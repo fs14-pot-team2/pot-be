@@ -3,6 +3,7 @@ import {
   cancelCareRequestController,
   createCareRequestController,
   getActiveCareRequestController,
+  getCareRequestQuotesHistoryController,
   getOpenCareRequestQuotesController,
   getReceivedCareRequestsController,
   updateCareRequestController,
@@ -35,6 +36,14 @@ careRequestRouter.get(
   authenticate,
   authorize("OWNER"),
   getOpenCareRequestQuotesController,
+);
+
+// 지난 돌봄 요청에 받은 견적 및 반려 조회
+careRequestRouter.get(
+  "/me/history/quotes",
+  authenticate,
+  authorize("OWNER"),
+  getCareRequestQuotesHistoryController,
 );
 
 // 돌봄 요청 생성

@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_TELEMETRY_DISABLED: "1"
+      JWT_ACCESS_SECRET: "ci-only-access-secret-not-for-production"
+      JWT_REFRESH_SECRET: "ci-only-refresh-secret-not-for-production"
       JWT_REAUTH_SECRET: "ci-only-reauth-secret-not-for-production"
     steps:
       - uses: actions/checkout@v4

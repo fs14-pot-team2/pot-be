@@ -4,6 +4,7 @@ import {
   cancelCareRequestService,
   createCareRequest,
   getActiveCareRequest,
+  getCareRequestQuotesHistoryByOwner,
   getOpenCareRequestQuotes,
   getReceivedCareRequests,
   updateCareRequest,
@@ -11,6 +12,7 @@ import {
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 import { serializeDate } from "../utils/serialize-date.js";
 import {
+  validateCareRequestQuotesHistoryQuery,
   validateCreateCareRequest,
   validateReceivedCareRequestsQuery,
   validateUpdateCareRequest,
@@ -192,4 +194,17 @@ export async function getOpenCareRequestQuotesController(req: Request, res: Resp
   const careRequestQuoteOverview = await getOpenCareRequestQuotes(ownerId);
 
   res.status(200).json(serializeBigInt(careRequestQuoteOverview));
+}
+
+// 팟오너의 돌봄 요청 이력과 해당 요청에 받은 견적 및 반려 조회
+export async function getCareRequestQuotesHistoryController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const ownerId = req.user.id;
+  const query = validateCareRequestQuotesHistoryQuery(req.query);
+  const careRequestQuoteHistory = await getCareRequestQuotesHistoryByOwner(ownerId, query);
+
+  res.status(200).json(serializeBigInt(careRequestQuoteHistory));
 }
