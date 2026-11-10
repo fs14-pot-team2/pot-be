@@ -24,6 +24,9 @@ export const env = {
   get jwtRefreshSecret(): string {
     return requireEnv("JWT_REFRESH_SECRET");
   },
+  get jwtReauthSecret(): string {
+    return requireEnv("JWT_REAUTH_SECRET");
+  },
   get profileImageS3Bucket(): string {
     return requireEnv("PROFILE_IMAGE_S3_BUCKET");
   },
