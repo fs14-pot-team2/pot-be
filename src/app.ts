@@ -11,6 +11,7 @@ import { imageRouter } from "./routes/image-routes.js";
 import { quoteRouter } from "./routes/quote-routes.js";
 import { reviewRouter } from "./routes/review-routes.js";
 import { errorMiddleware } from "./middlewares/error-middleware.js";
+import { messageRouter } from "./routes/message-routes.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -30,5 +31,6 @@ app.use("/users", userRoutes);
 app.use(sitterRouter);
 app.use(reviewRouter);
 app.use("/profile-images", imageRouter);
+app.use(messageRouter);
 
 app.use(errorMiddleware);
