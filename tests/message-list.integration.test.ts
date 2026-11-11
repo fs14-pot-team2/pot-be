@@ -152,7 +152,7 @@ describe("쪽지 목록 조회", () => {
       );
     });
 
-    // 대화방이 존재해도 같은 역할이면 조회할 수 없는지 확인
+    // 같은 역할(팟트너끼리)이면 조회할 수 없는지 확인
     it("팟트너끼리는 조회할 수 없다", async () => {
       const sitterId = await createUser("SITTER");
       const otherSitterId = await createUser("SITTER");
