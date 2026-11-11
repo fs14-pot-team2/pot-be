@@ -66,3 +66,36 @@ export function findAnyUnreadNotification(recipientId: bigint, db: DbClient = pr
     },
   });
 }
+
+// 알림 단건 읽음 처리를 위한 조회
+export function findNotificationForRead(notificationId: bigint, db: DbClient = prisma) {
+  return db.notification.findUnique({
+    where: { id: notificationId },
+    select: {
+      id: true,
+      recipientId: true,
+      readAt: true,
+    },
+  });
+}
+
+// 알림 단건 읽음 처리
+export function markNotificationAsRead(
+  notificationId: bigint,
+  recipientId: bigint,
+  readAt: Date,
+  db: DbClient = prisma,
+) {
+  return db.notification.update({
+    where: {
+      id: notificationId,
+      recipientId,
+      readAt: null,
+    },
+    data: { readAt },
+    select: {
+      id: true,
+      readAt: true,
+    },
+  });
+}

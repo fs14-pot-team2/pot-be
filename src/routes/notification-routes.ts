@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getNotificationsController,
   hasUnreadNotificationController,
+  readNotificationController,
 } from "../controllers/notification-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
@@ -17,4 +18,12 @@ notificationRouter.get(
   authenticate,
   authorize("OWNER", "SITTER"),
   hasUnreadNotificationController,
+);
+
+// 알림 단건 읽음 처리
+notificationRouter.patch(
+  "/:notificationId/read",
+  authenticate,
+  authorize("OWNER", "SITTER"),
+  readNotificationController,
 );
