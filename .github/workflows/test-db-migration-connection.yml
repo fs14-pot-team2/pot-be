@@ -1,0 +1,60 @@
+name: Test DB Migration Connection
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-connection:
+    name: Test GitHub to CodeBuild
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DB_MIGRATION_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Start CodeBuild
+        id: build
+        run: |
+          BUILD_ID=$(aws codebuild start-build \
+            --project-name pot-db-migrate-dev \
+            --query 'build.id' \
+            --output text)
+
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "CodeBuild started: $BUILD_ID"
+
+      - name: Wait for CodeBuild result
+        env:
+          BUILD_ID: ${{ steps.build.outputs.build_id }}
+        run: |
+          for i in {1..60}; do
+            STATUS=$(aws codebuild batch-get-builds \
+              --ids "$BUILD_ID" \
+              --query 'builds[0].buildStatus' \
+              --output text)
+
+            echo "CodeBuild status: $STATUS"
+
+            if [ "$STATUS" = "SUCCEEDED" ]; then
+              exit 0
+            fi
+
+            if [[ "$STATUS" = "FAILED" ||
+                  "$STATUS" = "FAULT" ||
+                  "$STATUS" = "STOPPED" ||
+                  "$STATUS" = "TIMED_OUT" ]]; then
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          echo "CodeBuild wait timed out"
+          exit 1
