@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getConversationsController,
   sendMessageController,
+  getMessagesController,
 } from "../controllers/message-controller.js";
 import { authenticate } from "../middlewares/auth-middleware.js";
 
@@ -12,3 +13,5 @@ messageRouter.get("/conversations", authenticate, getConversationsController);
 
 // 쪽지 발송
 messageRouter.post("/messages", authenticate, sendMessageController);
+// 쪽지 목록 조회 (대화방이 없으면 빈 목록)
+messageRouter.get("/conversations/with/:otherUserId/messages", authenticate, getMessagesController);
