@@ -155,5 +155,9 @@ src/generated/prisma/
 .lambda-build/
 artifacts/lambda/
 
+# Prisma migration packaging output
+.migration-build/
+artifacts/migration/
+
 # macOS
 .DS_Store

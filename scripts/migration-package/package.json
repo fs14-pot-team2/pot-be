@@ -1,0 +1,13 @@
+{
+  "name": "pot-prisma-migration-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.19 || ^22.12 || >=24.0"
+  },
+  "dependencies": {
+    "dotenv": "17.4.2",
+    "prisma": "7.10.1"
+  }
+}
