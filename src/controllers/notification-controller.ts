@@ -3,7 +3,7 @@ import AppError from "../errors/app-error.js";
 import {
   getNotifications,
   hasUnreadNotification,
-  readNotification,
+  markNotificationAsRead,
 } from "../services/notification-service.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 import { validateCursorQuery } from "../validators/pagination-validator.js";
@@ -38,7 +38,7 @@ export async function hasUnreadNotificationController(req: Request, res: Respons
 }
 
 // 알림 단건 읽음 처리
-export async function readNotificationController(req: Request, res: Response) {
+export async function markNotificationAsReadController(req: Request, res: Response) {
   if (!req.user) {
     throw new AppError("UNAUTHORIZED");
   }
@@ -49,7 +49,7 @@ export async function readNotificationController(req: Request, res: Response) {
     throw new AppError("INVALID_ID");
   }
 
-  const notification = await readNotification(req.user.id, notificationId);
+  const notification = await markNotificationAsRead(req.user.id, notificationId);
 
   res.status(200).json(serializeBigInt(notification));
 }

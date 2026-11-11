@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   getNotificationsController,
   hasUnreadNotificationController,
-  readNotificationController,
+  markNotificationAsReadController,
 } from "../controllers/notification-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
 
@@ -25,5 +25,5 @@ notificationRouter.patch(
   "/:notificationId/read",
   authenticate,
   authorize("OWNER", "SITTER"),
-  readNotificationController,
+  markNotificationAsReadController,
 );

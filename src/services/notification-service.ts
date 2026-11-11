@@ -4,7 +4,7 @@ import {
   findNotification,
   findNotificationForRead,
   findNotifications,
-  markNotificationAsRead,
+  updateNotificationReadAt,
 } from "../repositories/notification-repository.js";
 import { isRecordNotFoundError } from "../utils/prisma-error.js";
 
@@ -47,7 +47,7 @@ export async function hasUnreadNotification(recipientId: bigint) {
 }
 
 // 알림 단건 읽음 처리
-export async function readNotification(recipientId: bigint, notificationId: bigint) {
+export async function markNotificationAsRead(recipientId: bigint, notificationId: bigint) {
   const notification = await findNotificationForRead(notificationId);
 
   if (!notification) {
@@ -58,34 +58,39 @@ export async function readNotification(recipientId: bigint, notificationId: bigi
     throw new AppError("FORBIDDEN");
   }
 
-  if (notification.readAt !== null) {
-    return { id: notification.id, readAt: notification.readAt };
+  let notificationReadAt = notification.readAt;
+
+  if (notificationReadAt === null) {
+    try {
+      const updatedNotification = await updateNotificationReadAt(
+        notificationId,
+        recipientId,
+        new Date(),
+      );
+
+      notificationReadAt = updatedNotification.readAt;
+    } catch (error) {
+      if (!isRecordNotFoundError(error)) {
+        throw error;
+      }
+
+      const refreshedNotification = await findNotificationForRead(notificationId);
+
+      if (!refreshedNotification) {
+        throw new AppError("NOTIFICATION_NOT_FOUND");
+      }
+
+      if (refreshedNotification.recipientId !== recipientId) {
+        throw new AppError("FORBIDDEN");
+      }
+
+      if (refreshedNotification.readAt === null) {
+        throw error;
+      }
+
+      notificationReadAt = refreshedNotification.readAt;
+    }
   }
 
-  try {
-    return await markNotificationAsRead(notificationId, recipientId, new Date());
-  } catch (error) {
-    if (!isRecordNotFoundError(error)) {
-      throw error;
-    }
-
-    const refreshedNotification = await findNotificationForRead(notificationId);
-
-    if (!refreshedNotification) {
-      throw new AppError("NOTIFICATION_NOT_FOUND");
-    }
-
-    if (refreshedNotification.recipientId !== recipientId) {
-      throw new AppError("FORBIDDEN");
-    }
-
-    if (refreshedNotification.readAt !== null) {
-      return {
-        id: refreshedNotification.id,
-        readAt: refreshedNotification.readAt,
-      };
-    }
-
-    throw error;
-  }
+  return { id: notification.id, readAt: notificationReadAt };
 }

@@ -80,7 +80,7 @@ export function findNotificationForRead(notificationId: bigint, db: DbClient = p
 }
 
 // 알림 단건 읽음 처리
-export function markNotificationAsRead(
+export function updateNotificationReadAt(
   notificationId: bigint,
   recipientId: bigint,
   readAt: Date,

@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
-import { readNotification } from "../src/services/notification-service.js";
+import { markNotificationAsRead } from "../src/services/notification-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
 // 테스트에 사용할 KST 기준 날짜
@@ -151,7 +151,7 @@ async function runWithNotificationLock(
   );
 
   const blockingPid = await locked;
-  const readPromise = readNotification(recipientId, notificationId);
+  const readPromise = markNotificationAsRead(recipientId, notificationId);
 
   // 잠금 해제 전 발생한 오류도 처리할 수 있도록 Promise 결과 보관
   const settledRead = readPromise.then(
@@ -185,7 +185,7 @@ describe("알림 단건 읽음 처리", () => {
       const missingNotificationId = notification.id + 1_000_000n;
 
       await assert.rejects(
-        readNotification(ownerId, missingNotificationId),
+        markNotificationAsRead(ownerId, missingNotificationId),
         assertAppError("NOTIFICATION_NOT_FOUND", 404),
       );
 
@@ -202,7 +202,7 @@ describe("알림 단건 읽음 처리", () => {
       const notification = await createTestNotification(ownerId, careRequestId);
 
       await assert.rejects(
-        readNotification(sitterId, notification.id),
+        markNotificationAsRead(sitterId, notification.id),
         assertAppError("FORBIDDEN", 403),
       );
 
@@ -221,8 +221,8 @@ describe("알림 단건 읽음 처리", () => {
       const notification = await createTestNotification(ownerId, careRequestId);
 
       const results = await Promise.all([
-        readNotification(ownerId, notification.id),
-        readNotification(ownerId, notification.id),
+        markNotificationAsRead(ownerId, notification.id),
+        markNotificationAsRead(ownerId, notification.id),
       ]);
 
       const savedNotification = await prisma.notification.findUniqueOrThrow({
@@ -237,7 +237,7 @@ describe("알림 단건 읽음 처리", () => {
         assert.equal(result.readAt.getTime(), savedNotification.readAt.getTime());
       }
 
-      const repeatedResult = await readNotification(ownerId, notification.id);
+      const repeatedResult = await markNotificationAsRead(ownerId, notification.id);
 
       assert.equal(repeatedResult.id, notification.id);
       assert.ok(repeatedResult.readAt instanceof Date);
