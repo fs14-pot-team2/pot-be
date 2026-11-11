@@ -53,3 +53,16 @@ export function findNotifications(
     },
   });
 }
+
+// 본인 미확인 알림 존재 여부 조회
+export function findAnyUnreadNotification(recipientId: bigint, db: DbClient = prisma) {
+  return db.notification.findFirst({
+    where: {
+      recipientId,
+      readAt: null,
+    },
+    select: {
+      id: true,
+    },
+  });
+}

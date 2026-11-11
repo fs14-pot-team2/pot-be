@@ -1,5 +1,9 @@
 import AppError from "../errors/app-error.js";
-import { findNotification, findNotifications } from "../repositories/notification-repository.js";
+import {
+  findAnyUnreadNotification,
+  findNotification,
+  findNotifications,
+} from "../repositories/notification-repository.js";
 
 // 본인 알림 목록 조회
 export async function getNotifications(
@@ -27,5 +31,14 @@ export async function getNotifications(
     items: paginatedNotifications,
     nextCursor: hasNext ? paginatedNotifications[paginatedNotifications.length - 1]!.id : null,
     hasNext,
+  };
+}
+
+// 본인 미확인 알림 존재 여부 조회
+export async function hasUnreadNotification(recipientId: bigint) {
+  const unreadNotification = await findAnyUnreadNotification(recipientId);
+
+  return {
+    hasUnreadNotification: unreadNotification !== null,
   };
 }
