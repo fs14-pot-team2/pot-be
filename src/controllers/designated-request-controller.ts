@@ -81,9 +81,9 @@ export async function getRejectedRequestsBySitterController(req: Request, res: R
   const sitterId = req.user.id;
   const { page, pageSize } = validatePagination(req.query.page, req.query.pageSize);
 
-  const result = await getRejectedRequestsBySitter(sitterId, page, pageSize);
+  const rejectedRequests = await getRejectedRequestsBySitter(sitterId, page, pageSize);
 
-  const items = result.items.map((item) => ({
+  const items = rejectedRequests.items.map((item) => ({
     rejectedRequest: {
       id: item.id,
       createdAt: item.createdAt,
@@ -106,10 +106,10 @@ export async function getRejectedRequestsBySitterController(req: Request, res: R
   res.status(200).json(
     serializeBigInt({
       items,
-      page: result.page,
-      pageSize: result.pageSize,
-      totalCount: result.totalCount,
-      totalPages: result.totalPages,
+      page: rejectedRequests.page,
+      pageSize: rejectedRequests.pageSize,
+      totalCount: rejectedRequests.totalCount,
+      totalPages: rejectedRequests.totalPages,
     }),
   );
 }

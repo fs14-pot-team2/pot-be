@@ -153,9 +153,9 @@ export async function getReceivedCareRequestsController(req: Request, res: Respo
 
   const sitterId = req.user.id;
   const query = validateReceivedCareRequestsQuery(req.query);
-  const result = await getReceivedCareRequests(sitterId, query);
+  const receivedCareRequests = await getReceivedCareRequests(sitterId, query);
 
-  const items = result.items.map((item) => ({
+  const items = receivedCareRequests.items.map((item) => ({
     careRequest: {
       id: item.id,
       createdAt: item.createdAt,
@@ -175,11 +175,11 @@ export async function getReceivedCareRequestsController(req: Request, res: Respo
   res.status(200).json(
     serializeBigInt({
       items,
-      availableRegions: result.availableRegions,
-      page: result.page,
-      pageSize: result.pageSize,
-      totalCount: result.totalCount,
-      totalPages: result.totalPages,
+      availableRegions: receivedCareRequests.availableRegions,
+      page: receivedCareRequests.page,
+      pageSize: receivedCareRequests.pageSize,
+      totalCount: receivedCareRequests.totalCount,
+      totalPages: receivedCareRequests.totalPages,
     }),
   );
 }
