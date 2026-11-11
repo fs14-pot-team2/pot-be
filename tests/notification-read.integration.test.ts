@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
@@ -13,13 +13,6 @@ function futureDate(days: number) {
   const date = new Date(`${getTodayInKst()}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return new Date(date.toISOString().slice(0, 10));
-}
-
-// Prisma P2025 충돌 오류 생성
-function createP2025Error() {
-  return Object.assign(new Error("Record not found"), {
-    code: "P2025",
-  });
 }
 
 // Prisma P2025 원본 오류 전달 확인
@@ -183,6 +176,44 @@ async function runWithNotificationLock(
 }
 
 describe("알림 단건 읽음 처리", () => {
+  describe("정상 및 예외 처리", () => {
+    // 존재하지 않는 알림에 대한 읽음 요청 시 NOTIFICATION_NOT_FOUND 반환 확인
+    it("존재하지 않는 알림은 NOTIFICATION_NOT_FOUND를 반환한다", async () => {
+      const { ownerId, careRequestId } = await createTestRequest();
+      const notification = await createTestNotification(ownerId, careRequestId);
+
+      const missingNotificationId = notification.id + 1_000_000n;
+
+      await assert.rejects(
+        readNotification(ownerId, missingNotificationId),
+        assertAppError("NOTIFICATION_NOT_FOUND", 404),
+      );
+
+      const savedNotification = await prisma.notification.findUniqueOrThrow({
+        where: { id: notification.id },
+      });
+
+      assert.equal(savedNotification.readAt, null);
+    });
+
+    // 타인 알림 읽음 요청 시 FORBIDDEN 반환 및 기존 읽음 상태 유지 확인
+    it("타인 알림은 FORBIDDEN을 반환하고 readAt을 변경하지 않는다", async () => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+      const notification = await createTestNotification(ownerId, careRequestId);
+
+      await assert.rejects(
+        readNotification(sitterId, notification.id),
+        assertAppError("FORBIDDEN", 403),
+      );
+
+      const savedNotification = await prisma.notification.findUniqueOrThrow({
+        where: { id: notification.id },
+      });
+
+      assert.equal(savedNotification.recipientId, ownerId);
+      assert.equal(savedNotification.readAt, null);
+    });
+  });
   describe("동시성 및 트랜잭션", () => {
     // 동일 알림의 동시 읽음 요청이 최초 읽음 시각을 공유하고 DB 상태를 유지하는지 확인
     it("동일 알림의 동시 읽음 요청 시 최초 readAt을 유지한다", async () => {
