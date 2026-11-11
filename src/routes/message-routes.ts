@@ -2,8 +2,8 @@ import { Router } from "express";
 import {
   getConversationsController,
   getMessagesController,
-  sendMessageController,
   readMessagesController,
+  sendMessageController,
 } from "../controllers/message-controller.js";
 import { authenticate } from "../middlewares/auth-middleware.js";
 
