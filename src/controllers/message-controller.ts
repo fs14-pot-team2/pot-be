@@ -10,10 +10,11 @@ import {
 import { serializeBigInt } from "../utils/bigint.js";
 import {
   validateConversationIdParam,
-  validateCursorQuery,
   validateOtherUserIdParam,
   validateSendMessageBody,
 } from "../validators/message-validator.js";
+
+import { validateCursorQuery } from "../validators/pagination-validator.js";
 
 // 대화방 목록 조회
 export async function getConversationsController(req: Request, res: Response) {
@@ -21,10 +22,15 @@ export async function getConversationsController(req: Request, res: Response) {
     throw new AppError("UNAUTHORIZED");
   }
 
-  const { cursor, limit } = validateCursorQuery({
-    cursor: req.query.cursor,
-    limit: req.query.limit,
-  });
+  const { cursor, limit } = validateCursorQuery(
+    {
+      cursor: req.query.cursor,
+      limit: req.query.limit,
+    },
+    8,
+    100,
+  );
+
   const result = await getConversations(req.user.id, cursor, limit);
 
   res.status(200).json(serializeBigInt(result));
@@ -37,10 +43,14 @@ export async function getMessagesController(req: Request, res: Response) {
   }
 
   const otherUserId = validateOtherUserIdParam(req.params.otherUserId);
-  const { cursor, limit } = validateCursorQuery({
-    cursor: req.query.cursor,
-    limit: req.query.limit,
-  });
+  const { cursor, limit } = validateCursorQuery(
+    {
+      cursor: req.query.cursor,
+      limit: req.query.limit,
+    },
+    8,
+    100,
+  );
   const result = await getMessages(req.user.id, req.user.role, otherUserId, cursor, limit);
 
   res.status(200).json(serializeBigInt(result));
