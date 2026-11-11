@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import AppError from "../errors/app-error.js";
-import { getNotifications } from "../services/notification-service.js";
+import { getNotifications, hasUnreadNotification } from "../services/notification-service.js";
 import { serializeBigInt } from "../utils/bigint.js";
 import { validateCursorQuery } from "../validators/pagination-validator.js";
 
@@ -22,4 +22,13 @@ export async function getNotificationsController(req: Request, res: Response) {
   const notifications = await getNotifications(req.user.id, { cursor, limit });
 
   res.status(200).json(serializeBigInt(notifications));
+}
+
+// 본인 미확인 알림 존재 여부 조회
+export async function hasUnreadNotificationController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  res.status(200).json(await hasUnreadNotification(req.user.id));
 }
