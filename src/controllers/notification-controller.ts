@@ -3,6 +3,7 @@ import AppError from "../errors/app-error.js";
 import {
   getNotifications,
   hasUnreadNotification,
+  markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "../services/notification-service.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
@@ -52,4 +53,15 @@ export async function markNotificationAsReadController(req: Request, res: Respon
   const notification = await markNotificationAsRead(req.user.id, notificationId);
 
   res.status(200).json(serializeBigInt(notification));
+}
+
+// 본인 미확인 알림 일괄 읽음 처리
+export async function markAllNotificationsAsReadController(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("UNAUTHORIZED");
+  }
+
+  const updatedNotifications = await markAllNotificationsAsRead(req.user.id);
+
+  res.status(200).json(updatedNotifications);
 }

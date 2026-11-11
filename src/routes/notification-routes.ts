@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getNotificationsController,
   hasUnreadNotificationController,
+  markAllNotificationsAsReadController,
   markNotificationAsReadController,
 } from "../controllers/notification-controller.js";
 import { authenticate, authorize } from "../middlewares/auth-middleware.js";
@@ -26,4 +27,12 @@ notificationRouter.patch(
   authenticate,
   authorize("OWNER", "SITTER"),
   markNotificationAsReadController,
+);
+
+// 본인 미확인 알림 일괄 읽음 처리
+notificationRouter.patch(
+  "/read-all",
+  authenticate,
+  authorize("OWNER", "SITTER"),
+  markAllNotificationsAsReadController,
 );

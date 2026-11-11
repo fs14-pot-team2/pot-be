@@ -5,6 +5,7 @@ import {
   findNotificationForRead,
   findNotifications,
   updateNotificationReadAt,
+  updateNotificationsReadAt,
 } from "../repositories/notification-repository.js";
 import { isRecordNotFoundError } from "../utils/prisma-error.js";
 
@@ -93,4 +94,12 @@ export async function markNotificationAsRead(recipientId: bigint, notificationId
   }
 
   return { id: notification.id, readAt: notificationReadAt };
+}
+
+// 본인 미확인 알림 일괄 읽음 처리
+export async function markAllNotificationsAsRead(recipientId: bigint) {
+  const updatedNotificationsCount = (await updateNotificationsReadAt(recipientId, new Date()))
+    .count;
+
+  return { updatedCount: updatedNotificationsCount };
 }

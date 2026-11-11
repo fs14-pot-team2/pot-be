@@ -99,3 +99,18 @@ export function updateNotificationReadAt(
     },
   });
 }
+
+// 본인 미확인 알림 일괄 읽음 처리
+export function updateNotificationsReadAt(
+  recipientId: bigint,
+  readAt: Date,
+  db: DbClient = prisma,
+) {
+  return db.notification.updateMany({
+    where: {
+      recipientId,
+      readAt: null,
+    },
+    data: { readAt },
+  });
+}
