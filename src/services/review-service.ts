@@ -1,5 +1,6 @@
 import AppError from "../errors/app-error.js";
 import { CareRequestStatus } from "../generated/prisma/enums.js";
+import { prisma } from "../config/prisma.js";
 import {
   countReviewsByOwnerId,
   findReviewsByOwnerId,
@@ -15,11 +16,15 @@ import {
   insertReview,
   updateReviewById,
 } from "../repositories/review-repository.js";
+import { insertNotification } from "../repositories/notification-repository.js";
+import { findUserById } from "../repositories/user-repository.js";
 import { getTodayInKst, isBeforeTodayInKst } from "../utils/kst-date.js";
 import { getUniqueConstraintName, isRecordNotFoundError } from "../utils/prisma-error.js";
+import { createNotificationMessage } from "../utils/notification-message.js";
 import { serializeDate } from "../utils/serialize-date.js";
 import type { CreateReviewInput, UpdateReviewInput } from "../validators/review-validator.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
+import type { TransactionRunner } from "../types/db.js";
 
 const REVIEW_CARE_REQUEST_UNIQUE_INDEX = "Review_careRequestId_key";
 
@@ -77,6 +82,7 @@ export async function createReview(
   userId: bigint,
   careRequestId: bigint,
   input: CreateReviewInput,
+  runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
   const careRequest = await findCareRequestForReview(careRequestId);
 
@@ -101,13 +107,42 @@ export async function createReview(
     throw new AppError("REVIEW_ALREADY_EXISTS");
   }
 
+  const sitterId = careRequest.confirmedQuote.sitterId;
+
   try {
-    const review = await insertReview({
-      careRequestId,
-      ownerId: userId,
-      sitterId: careRequest.confirmedQuote.sitterId,
-      rating: input.rating,
-      content: input.content,
+    const review = await runTransaction(async (tx) => {
+      const createdReview = await insertReview(
+        {
+          careRequestId,
+          ownerId: userId,
+          sitterId,
+          rating: input.rating,
+          content: input.content,
+        },
+        tx,
+      );
+
+      const owner = await findUserById(userId, tx);
+
+      if (!owner) {
+        throw new AppError("INTERNAL_SERVER_ERROR");
+      }
+
+      await insertNotification(
+        {
+          recipientId: createdReview.sitterId,
+          careRequestId,
+          reviewId: createdReview.id,
+          type: "REVIEW_RECEIVED",
+          message: createNotificationMessage({
+            type: "REVIEW_RECEIVED",
+            nickname: owner.nickname,
+          }),
+        },
+        tx,
+      );
+
+      return createdReview;
     });
 
     return {
