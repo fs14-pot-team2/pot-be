@@ -214,6 +214,13 @@ describe("견적 확정", () => {
       assert.equal(savedRequest.status, "MATCHED");
       assert.equal(savedRequest.confirmedQuoteId, quoteId);
       assert.equal(await prisma.quote.count({ where: { careRequestId } }), 2);
+
+      const notifications = await prisma.notification.findMany({
+        where: { careRequestId, type: "QUOTE_CONFIRMED" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0].quoteId, quoteId);
     });
 
     // 서로 다른 견적을 동시에 확정해도 하나만 확정되고 다른 견적은 유지되는지 확인
@@ -246,6 +253,14 @@ describe("견적 확정", () => {
       assert.equal(savedRequest.status, "MATCHED");
       assert.equal(savedRequest.confirmedQuoteId, succeeded[0].value.quote.id);
       assert.equal(await prisma.quote.count({ where: { careRequestId } }), 2);
+
+      const notifications = await prisma.notification.findMany({
+        where: { careRequestId, type: "QUOTE_CONFIRMED" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0].quoteId, succeeded[0].value.quote.id);
+      assert.equal(notifications[0].recipientId, succeeded[0].value.quote.sitterId);
     });
 
     // 견적 수정과 확정의 실행 순서를 각각 고정하여 수정 가능 여부를 확인
@@ -299,6 +314,30 @@ describe("견적 확정", () => {
           savedQuote.price,
           firstOperation === "UPDATE" ? 25000 : originalQuotes[0].price,
         );
+
+        const notifications = await prisma.notification.findMany({
+          where: {
+            careRequestId,
+            quoteId,
+            type: { in: ["QUOTE_UPDATED", "QUOTE_CONFIRMED"] },
+          },
+        });
+
+        const updatedNotifications = notifications.filter(
+          (notification) => notification.type === "QUOTE_UPDATED",
+        );
+        const confirmedNotifications = notifications.filter(
+          (notification) => notification.type === "QUOTE_CONFIRMED",
+        );
+
+        assert.equal(updatedNotifications.length, firstOperation === "UPDATE" ? 1 : 0);
+        assert.equal(confirmedNotifications.length, 1);
+
+        if (firstOperation === "UPDATE") {
+          assert.equal(updatedNotifications[0].recipientId, ownerId);
+        }
+
+        assert.equal(confirmedNotifications[0].recipientId, sitterIds[0]);
       });
     }
 

@@ -200,6 +200,18 @@ describe("견적 생성", () => {
       assert.ok(assertAppError("GENERAL_QUOTE_LIMIT_EXCEEDED")(rejected[0].reason));
 
       assert.equal(await prisma.quote.count({ where: { careRequestId, type: "GENERAL" } }), 5);
+
+      const notifications = await prisma.notification.findMany({
+        where: { careRequestId, type: "QUOTE_RECEIVED" },
+      });
+
+      assert.equal(notifications.length, succeeded.length);
+      assert.deepEqual(
+        new Set(notifications.map((notification) => notification.quoteId)),
+        new Set(
+          results.flatMap((result) => (result.status === "fulfilled" ? [result.value.id] : [])),
+        ),
+      );
     });
 
     // 동일 팟트너의 동시 견적 생성 시 하나만 성공하고 중복 생성을 방지하는지 확인
@@ -222,6 +234,16 @@ describe("견적 생성", () => {
       assert.ok(assertAppError("QUOTE_ALREADY_EXISTS")(rejected[0].reason));
 
       assert.equal(await prisma.quote.count({ where: { careRequestId, sitterId } }), 1);
+
+      const notifications = await prisma.notification.findMany({
+        where: { careRequestId, type: "QUOTE_RECEIVED" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0].quoteId,
+        results.find((result) => result.status === "fulfilled")?.value.id,
+      );
     });
 
     // 돌봄 요청 수정과 견적 생성이 동시에 실행될 때 처리 순서에 따른 수정 여부 확인
