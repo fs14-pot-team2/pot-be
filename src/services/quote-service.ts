@@ -19,15 +19,19 @@ import {
   findQuote,
   findQuoteDetail,
   findQuoteForConfirmation,
+  findQuoteForUpdate,
   findSentQuotes,
   insertQuote,
   updateQuote,
 } from "../repositories/quote-repository.js";
 import { findIgnoredRequestByCareRequestAndSitter } from "../repositories/ignored-request-repository.js";
 import { lockSitterProfileByUserId } from "../repositories/profile-repository.js";
+import { insertNotification } from "../repositories/notification-repository.js";
+import { findUserById } from "../repositories/user-repository.js";
 import type { TransactionRunner } from "../types/db.js";
 import type { AuthUser } from "../types/auth.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { createNotificationMessage } from "../utils/notification-message.js";
 import { serializeDate } from "../utils/serialize-date.js";
 import type { CreateQuoteInput } from "../validators/quote-validator.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
@@ -117,7 +121,36 @@ export async function createQuote(
         }
       }
 
-      return insertQuote(careRequestId, sitterId, quoteType, price, comment, tx);
+      const createdQuote = await insertQuote(
+        careRequestId,
+        sitterId,
+        quoteType,
+        price,
+        comment,
+        tx,
+      );
+
+      const sitter = await findUserById(sitterId, tx);
+
+      if (!sitter) {
+        throw new AppError("INTERNAL_SERVER_ERROR");
+      }
+
+      await insertNotification(
+        {
+          recipientId: careRequest.ownerId,
+          careRequestId,
+          quoteId: createdQuote.id,
+          type: "QUOTE_RECEIVED",
+          message: createNotificationMessage({
+            type: "QUOTE_RECEIVED",
+            nickname: sitter.nickname,
+          }),
+        },
+        tx,
+      );
+
+      return createdQuote;
     });
 
     if (!createdQuote) {
@@ -188,7 +221,7 @@ export async function updateQuoteService(
         return null;
       }
 
-      const targetQuote = await findQuote(quoteId, tx);
+      const targetQuote = await findQuoteForUpdate(quoteId, tx);
 
       if (!targetQuote) {
         throw new AppError("QUOTE_NOT_FOUND");
@@ -198,7 +231,36 @@ export async function updateQuoteService(
         throw new AppError("FORBIDDEN");
       }
 
-      return updateQuote(quoteId, quoteData, tx);
+      // 실제 견적 내용 변경 여부 확인
+      const hasChanges =
+        (quoteData.price !== undefined && quoteData.price !== targetQuote.price) ||
+        (quoteData.comment !== undefined && quoteData.comment !== targetQuote.comment);
+
+      const updatedQuote = await updateQuote(quoteId, quoteData, tx);
+
+      if (hasChanges) {
+        const sitter = await findUserById(sitterId, tx);
+
+        if (!sitter) {
+          throw new AppError("INTERNAL_SERVER_ERROR");
+        }
+
+        await insertNotification(
+          {
+            recipientId: careRequest.ownerId,
+            careRequestId,
+            quoteId: updatedQuote.id,
+            type: "QUOTE_UPDATED",
+            message: createNotificationMessage({
+              type: "QUOTE_UPDATED",
+              nickname: sitter.nickname,
+            }),
+          },
+          tx,
+        );
+      }
+
+      return updatedQuote;
     });
 
     if (!updatedQuote) {
@@ -274,6 +336,26 @@ export async function confirmQuoteService(
       }
 
       const confirmedRequest = await confirmCareRequest(careRequestId, ownerId, quoteId, tx);
+
+      const owner = await findUserById(ownerId, tx);
+
+      if (!owner) {
+        throw new AppError("INTERNAL_SERVER_ERROR");
+      }
+
+      await insertNotification(
+        {
+          recipientId: targetQuote.sitterId,
+          careRequestId,
+          quoteId: targetQuote.id,
+          type: "QUOTE_CONFIRMED",
+          message: createNotificationMessage({
+            type: "QUOTE_CONFIRMED",
+            nickname: owner.nickname,
+          }),
+        },
+        tx,
+      );
 
       return {
         quote: {

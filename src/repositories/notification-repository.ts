@@ -114,3 +114,13 @@ export function updateNotificationsReadAt(
     data: { readAt },
   });
 }
+
+// 알림 생성
+export function insertNotification(
+  notificationData: Prisma.NotificationUncheckedCreateInput,
+  db: DbClient = prisma,
+) {
+  return db.notification.create({
+    data: notificationData,
+  });
+}
