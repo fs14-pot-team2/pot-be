@@ -18,15 +18,19 @@ import {
   lockCareRequestForUpdate,
   updateOpenCareRequest,
 } from "../repositories/care-request-repository.js";
+import { insertNotifications } from "../repositories/notification-repository.js";
 import { findSitterProfileWithRegions } from "../repositories/profile-repository.js";
-import { findQuoteByCareRequestId } from "../repositories/quote-repository.js";
+import {
+  findQuoteByCareRequestId,
+  findQuoteSittersByCareRequestId,
+} from "../repositories/quote-repository.js";
 import { findSitterProfilesForQuotes } from "../repositories/sitter-repository.js";
-import { getSitterAggregates } from "./sitter-aggregate-service.js";
-import { expireCareRequestIfPast } from "./care-request-expiration.js";
-import { getTodayInKst } from "../utils/kst-date.js";
-import { serializeDate } from "../utils/serialize-date.js";
-import { toRegion } from "../utils/region.js";
+import { findUserById } from "../repositories/user-repository.js";
+import { createNotificationMessage } from "../utils/notification-message.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { toRegion } from "../utils/region.js";
+import { serializeDate } from "../utils/serialize-date.js";
+import { getTodayInKst } from "../utils/kst-date.js";
 import {
   validateUpdatedCareDates,
   type CareRequestQuotesHistoryQuery,
@@ -34,6 +38,8 @@ import {
   type UpdateCareRequestInput,
   type ReceivedCareRequestsQuery,
 } from "../validators/care-request-validator.js";
+import { expireCareRequestIfPast } from "./care-request-expiration.js";
+import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 // 팟오너의 신규 돌봄 요청 생성
 export async function createCareRequest(
@@ -258,7 +264,34 @@ export async function cancelCareRequestService(
         return null;
       }
 
-      return cancelCareRequest(careRequestId, ownerId, tx);
+      const quotes = await findQuoteSittersByCareRequestId(careRequestId, tx);
+      const sitterIds = quotes.map((quote) => quote.sitterId);
+
+      const canceledRequest = await cancelCareRequest(careRequestId, ownerId, tx);
+
+      if (sitterIds.length === 0) {
+        return canceledRequest;
+      }
+
+      const owner = await findUserById(ownerId, tx);
+
+      if (!owner) {
+        throw new AppError("INTERNAL_SERVER_ERROR");
+      }
+
+      const careRequestCanceledNotifications = sitterIds.map((sitterId) => ({
+        recipientId: sitterId,
+        careRequestId,
+        type: "CARE_REQUEST_CANCELED" as const,
+        message: createNotificationMessage({
+          type: "CARE_REQUEST_CANCELED",
+          nickname: owner.nickname,
+        }),
+      }));
+
+      await insertNotifications(careRequestCanceledNotifications, tx);
+
+      return canceledRequest;
     });
 
     if (!canceledRequest) {

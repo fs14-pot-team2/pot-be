@@ -227,6 +227,14 @@ export function findSentQuotes(
   });
 }
 
+// 돌봄 요청 취소 알림을 받을 견적 제출 팟트너 조회
+export function findQuoteSittersByCareRequestId(careRequestId: bigint, db: DbClient = prisma) {
+  return db.quote.findMany({
+    where: { careRequestId },
+    select: { sitterId: true },
+  });
+}
+
 // 돌봄 요청의 수정 가능 여부 확인을 위한 견적 조회
 export function findQuoteByCareRequestId(careRequestId: bigint, db: DbClient = prisma) {
   return db.quote.findFirst({

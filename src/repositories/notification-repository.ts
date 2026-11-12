@@ -115,12 +115,22 @@ export function updateNotificationsReadAt(
   });
 }
 
-// 알림 생성
+// 알림 단건 생성
 export function insertNotification(
   notificationData: Prisma.NotificationUncheckedCreateInput,
   db: DbClient = prisma,
 ) {
   return db.notification.create({
+    data: notificationData,
+  });
+}
+
+// 알림 일괄 생성
+export function insertNotifications(
+  notificationData: Prisma.NotificationCreateManyInput[],
+  db: DbClient = prisma,
+) {
+  return db.notification.createMany({
     data: notificationData,
   });
 }
