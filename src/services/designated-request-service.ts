@@ -19,6 +19,9 @@ import {
   insertDesignatedRequest,
   insertRejectedRequest,
 } from "../repositories/designated-request-repository.js";
+import { insertNotification } from "../repositories/notification-repository.js";
+import { findUserById } from "../repositories/user-repository.js";
+import { createNotificationMessage } from "../utils/notification-message.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 
@@ -83,7 +86,29 @@ export async function createDesignatedRequest(
         throw new AppError("DESIGNATED_REQUEST_LIMIT_EXCEEDED");
       }
 
-      return insertDesignatedRequest(careRequestId, sitterId, tx);
+      const createdDesignatedRequest = await insertDesignatedRequest(careRequestId, sitterId, tx);
+
+      const owner = await findUserById(ownerId, tx);
+
+      if (!owner) {
+        throw new AppError("INTERNAL_SERVER_ERROR");
+      }
+
+      await insertNotification(
+        {
+          recipientId: sitterId,
+          careRequestId,
+          designatedRequestId: createdDesignatedRequest.id,
+          type: "DESIGNATED_REQUEST_RECEIVED",
+          message: createNotificationMessage({
+            type: "DESIGNATED_REQUEST_RECEIVED",
+            nickname: owner.nickname,
+          }),
+        },
+        tx,
+      );
+
+      return createdDesignatedRequest;
     });
 
     if (!createdDesignatedRequest) {
@@ -181,7 +206,29 @@ export async function rejectDesignatedRequest(
         throw new AppError("QUOTE_ALREADY_EXISTS");
       }
 
-      return insertRejectedRequest(designatedRequestId, reason, tx);
+      const createdRejectedRequest = await insertRejectedRequest(designatedRequestId, reason, tx);
+
+      const sitter = await findUserById(sitterId, tx);
+
+      if (!sitter) {
+        throw new AppError("INTERNAL_SERVER_ERROR");
+      }
+
+      await insertNotification(
+        {
+          recipientId: targetRequest.ownerId,
+          careRequestId,
+          designatedRequestId,
+          type: "DESIGNATED_REQUEST_REJECTED",
+          message: createNotificationMessage({
+            type: "DESIGNATED_REQUEST_REJECTED",
+            nickname: sitter.nickname,
+          }),
+        },
+        tx,
+      );
+
+      return createdRejectedRequest;
     });
 
     if (!createdRejectedRequest) {
