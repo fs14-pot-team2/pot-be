@@ -5,6 +5,7 @@ import {
   CareRequestStatus,
   Gender,
   NotificationType,
+  Prisma,
   PrismaClient,
   QuoteType,
   Region,
@@ -551,6 +552,33 @@ async function main() {
         unread: boolean;
       };
 
+      // 중복 확인 조건: 단발성 알림은 DB 부분 UNIQUE 인덱스와 동일한 키로 확인
+      // (QUOTE_UPDATED처럼 UNIQUE 대상이 아닌 알림은 생성 시각까지 포함)
+      function buildDedupWhere(n: SeedNotification): Prisma.NotificationWhereInput {
+        const base = { recipientId: n.recipientId, type: n.type };
+
+        switch (n.type) {
+          case "QUOTE_RECEIVED":
+          case "QUOTE_CONFIRMED":
+            return { ...base, quoteId: n.quoteId ?? null };
+          case "DESIGNATED_REQUEST_RECEIVED":
+          case "DESIGNATED_REQUEST_REJECTED":
+            return { ...base, designatedRequestId: n.designatedRequestId ?? null };
+          case "REVIEW_RECEIVED":
+            return { ...base, reviewId: n.reviewId ?? null };
+          case "CARE_REQUEST_CANCELED":
+          case "CARE_REQUEST_EXPIRED":
+            return { ...base, careRequestId: n.careRequestId };
+          default:
+            return {
+              ...base,
+              careRequestId: n.careRequestId,
+              quoteId: n.quoteId ?? null,
+              createdAt: n.createdAt,
+            };
+        }
+      }
+
       const notifications: SeedNotification[] = [];
 
       for (const [requestIndex, request] of data.careRequests.entries()) {
@@ -711,15 +739,7 @@ async function main() {
 
       for (const notification of notifications) {
         const existing = await tx.notification.findFirst({
-          where: {
-            recipientId: notification.recipientId,
-            careRequestId: notification.careRequestId,
-            type: notification.type,
-            createdAt: notification.createdAt,
-            quoteId: notification.quoteId ?? null,
-            designatedRequestId: notification.designatedRequestId ?? null,
-            reviewId: notification.reviewId ?? null,
-          },
+          where: buildDedupWhere(notification),
         });
 
         if (existing) {
