@@ -226,3 +226,28 @@ export function findSentQuotes(
     },
   });
 }
+
+// 돌봄 요청의 수정 가능 여부 확인을 위한 견적 조회
+export function findQuoteByCareRequestId(careRequestId: bigint, db: DbClient = prisma) {
+  return db.quote.findFirst({
+    where: { careRequestId },
+    select: { id: true },
+  });
+}
+
+// 지정 대상 팟트너가 이미 견적을 제출했는지 확인
+export function findQuoteByCareRequestAndSitter(
+  careRequestId: bigint,
+  sitterId: bigint,
+  db: DbClient = prisma,
+) {
+  return db.quote.findUnique({
+    where: {
+      careRequestId_sitterId: {
+        careRequestId,
+        sitterId,
+      },
+    },
+    select: { id: true },
+  });
+}

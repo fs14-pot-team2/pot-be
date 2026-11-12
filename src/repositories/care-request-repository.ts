@@ -36,14 +36,6 @@ export async function lockCareRequestForUpdate(careRequestId: bigint, db: DbClie
   `;
 }
 
-// 돌봄 요청의 수정 가능 여부 확인을 위한 견적 조회
-export function findQuoteByCareRequestId(careRequestId: bigint, db: DbClient = prisma) {
-  return db.quote.findFirst({
-    where: { careRequestId },
-    select: { id: true },
-  });
-}
-
 // 시작일이 지난 활성 돌봄 요청을 기간 만료 상태로 변경
 export function expireCareRequest(careRequestId: bigint, db: DbClient = prisma) {
   return db.careRequest.update({
@@ -140,18 +132,6 @@ export function cancelCareRequest(careRequestId: bigint, ownerId: bigint, db: Db
   });
 }
 
-// 팟트너 프로필 등록 여부 및 서비스 가능 지역 확인
-export function findSitterProfileWithRegions(sitterId: bigint, db: DbClient = prisma) {
-  return db.sitterProfile.findUnique({
-    where: { userId: sitterId },
-    select: {
-      sitterServiceRegions: {
-        select: { region: true },
-      },
-    },
-  });
-}
-
 // 견적 확정
 export function confirmCareRequest(
   careRequestId: bigint,
@@ -170,14 +150,6 @@ export function confirmCareRequest(
       confirmedQuoteId: quoteId,
       status: CareRequestStatus.MATCHED,
     },
-  });
-}
-
-// 팟트너 프로필 등록 여부 확인
-export function findSitterProfileIdByUserId(sitterId: bigint, db: DbClient = prisma) {
-  return db.sitterProfile.findUnique({
-    where: { userId: sitterId },
-    select: { id: true },
   });
 }
 

@@ -3,7 +3,6 @@ import AppError from "../errors/app-error.js";
 import type { TransactionRunner } from "../types/db.js";
 import {
   findCareRequest,
-  findSitterProfileIdByUserId,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
 import {
@@ -11,16 +10,16 @@ import {
   countRejectedRequestsBySitter,
   findDesignatedRequestByCareRequestAndSitter,
   findDesignatedRequest,
-  findQuoteByCareRequestAndSitter,
   findRejectedRequest,
   findRejectedRequestByDesignatedRequestId,
   findRejectedRequestsBySitter,
-  findSitterByIdAndRole,
   insertDesignatedRequest,
   insertRejectedRequest,
 } from "../repositories/designated-request-repository.js";
 import { insertNotification } from "../repositories/notification-repository.js";
-import { findUserById } from "../repositories/user-repository.js";
+import { findSitterProfileIdByUserId } from "../repositories/profile-repository.js";
+import { findQuoteByCareRequestAndSitter } from "../repositories/quote-repository.js";
+import { findSitterByIdAndRole, findUserById } from "../repositories/user-repository.js";
 import { createNotificationMessage } from "../utils/notification-message.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";

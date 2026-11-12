@@ -143,3 +143,23 @@ export async function lockSitterProfileByUserId(userId: bigint, db: DbClient = p
 
   return lockedProfiles[0] ?? null;
 }
+
+// 팟트너 프로필 등록 여부 및 서비스 가능 지역 확인
+export function findSitterProfileWithRegions(sitterId: bigint, db: DbClient = prisma) {
+  return db.sitterProfile.findUnique({
+    where: { userId: sitterId },
+    select: {
+      sitterServiceRegions: {
+        select: { region: true },
+      },
+    },
+  });
+}
+
+// 팟트너 프로필 등록 여부 확인
+export function findSitterProfileIdByUserId(sitterId: bigint, db: DbClient = prisma) {
+  return db.sitterProfile.findUnique({
+    where: { userId: sitterId },
+    select: { id: true },
+  });
+}

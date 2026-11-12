@@ -12,14 +12,14 @@ import {
   findCareRequestQuotesHistoryByOwner,
   findOpenCareRequest,
   findOpenCareRequestQuotes,
-  findQuoteByCareRequestId,
   findReceivedCareRequests,
   findReceivedDesignatedRequestRegions,
-  findSitterProfileWithRegions,
   insertCareRequest,
   lockCareRequestForUpdate,
   updateOpenCareRequest,
 } from "../repositories/care-request-repository.js";
+import { findSitterProfileWithRegions } from "../repositories/profile-repository.js";
+import { findQuoteByCareRequestId } from "../repositories/quote-repository.js";
 import { findSitterProfilesForQuotes } from "../repositories/sitter-repository.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
