@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import {
   CareRequestStatus,
   Gender,
+  NotificationType,
+  Prisma,
   PrismaClient,
   QuoteType,
   Region,
@@ -148,6 +150,7 @@ async function main() {
       const careRequestIdByIndex = new Map<number, bigint>();
       const quoteIdByRequestAndSitter = new Map<string, bigint>();
       const designatedRequestIdByRequestAndSitter = new Map<string, bigint>();
+      const reviewIdByRequestIndex = new Map<number, bigint>();
 
       for (const [index, owner] of data.owners.entries()) {
         const passwordHash = ownerPasswordHashes[index];
@@ -461,7 +464,7 @@ async function main() {
           throw new Error(`돌봄 요청 ${requestIndex}: 리뷰 연결 대상을 찾을 수 없습니다.`);
         }
 
-        await tx.review.upsert({
+        const savedReview = await tx.review.upsert({
           where: { careRequestId },
           update: {},
           create: {
@@ -474,6 +477,7 @@ async function main() {
             updatedAt: new Date(review.updatedAt),
           },
         });
+        reviewIdByRequestIndex.set(requestIndex, savedReview.id);
       }
 
       for (const [conversationIndex, conversation] of data.conversations.entries()) {
@@ -535,6 +539,232 @@ async function main() {
         }
       }
 
+      // 알림 시드: 견적·지정·확정·리뷰 시드 데이터에서 파생
+      type SeedNotification = {
+        recipientId: bigint;
+        careRequestId: bigint;
+        quoteId?: bigint;
+        designatedRequestId?: bigint;
+        reviewId?: bigint;
+        type: NotificationType;
+        message: string;
+        createdAt: Date;
+        unread: boolean;
+      };
+
+      // 중복 확인 조건: 단발성 알림은 DB 부분 UNIQUE 인덱스와 동일한 키로 확인
+      // (QUOTE_UPDATED처럼 UNIQUE 대상이 아닌 알림은 생성 시각까지 포함)
+      function buildDedupWhere(n: SeedNotification): Prisma.NotificationWhereInput {
+        const base = { recipientId: n.recipientId, type: n.type };
+
+        switch (n.type) {
+          case "QUOTE_RECEIVED":
+          case "QUOTE_CONFIRMED":
+            return { ...base, quoteId: n.quoteId ?? null };
+          case "DESIGNATED_REQUEST_RECEIVED":
+          case "DESIGNATED_REQUEST_REJECTED":
+            return { ...base, designatedRequestId: n.designatedRequestId ?? null };
+          case "REVIEW_RECEIVED":
+            return { ...base, reviewId: n.reviewId ?? null };
+          case "CARE_REQUEST_CANCELED":
+          case "CARE_REQUEST_EXPIRED":
+            return { ...base, careRequestId: n.careRequestId };
+          default:
+            return {
+              ...base,
+              careRequestId: n.careRequestId,
+              quoteId: n.quoteId ?? null,
+              createdAt: n.createdAt,
+            };
+        }
+      }
+
+      const notifications: SeedNotification[] = [];
+
+      for (const [requestIndex, request] of data.careRequests.entries()) {
+        const careRequestId = careRequestIdByIndex.get(requestIndex);
+        const ownerId = ownerIdByIndex.get(request.ownerIndex);
+
+        if (careRequestId === undefined || ownerId === undefined) {
+          throw new Error(`돌봄 요청 ${requestIndex}: 알림 대상을 찾을 수 없습니다.`);
+        }
+
+        const isOpen = request.status === "OPEN";
+
+        // 팟오너: 견적 도착·수정
+        for (const [quoteIndex, quote] of request.quotes.entries()) {
+          const sitterNickname = data.sitters[quote.sitterIndex]?.nickname;
+          const quoteId = quoteIdByRequestAndSitter.get(`${requestIndex}:${quote.sitterIndex}`);
+
+          if (!sitterNickname || quoteId === undefined) {
+            throw new Error(`돌봄 요청 ${requestIndex}: 견적 알림 정보를 찾을 수 없습니다.`);
+          }
+
+          const unread = isOpen || quoteIndex % 3 === 0;
+
+          notifications.push({
+            recipientId: ownerId,
+            careRequestId,
+            quoteId,
+            type: "QUOTE_RECEIVED",
+            message: `${sitterNickname} 팟트너의 돌봄 견적이 도착했어요!`,
+            createdAt: new Date(quote.createdAt),
+            unread,
+          });
+
+          if (quote.updatedAt !== quote.createdAt) {
+            notifications.push({
+              recipientId: ownerId,
+              careRequestId,
+              quoteId,
+              type: "QUOTE_UPDATED",
+              message: `${sitterNickname} 팟트너가 견적을 수정했어요.`,
+              createdAt: new Date(quote.updatedAt),
+              unread,
+            });
+          }
+        }
+
+        // 팟트너: 지정 요청 도착, 팟오너: 지정 요청 반려
+        const ownerNickname = data.owners[request.ownerIndex]?.nickname ?? "팟오너";
+
+        for (const designated of request.designated) {
+          const sitterId = sitterIdByIndex.get(designated.sitterIndex);
+          const designatedRequestId = designatedRequestIdByRequestAndSitter.get(
+            `${requestIndex}:${designated.sitterIndex}`,
+          );
+          const sitterNickname = data.sitters[designated.sitterIndex]?.nickname;
+
+          if (sitterId === undefined || designatedRequestId === undefined || !sitterNickname) {
+            throw new Error(`돌봄 요청 ${requestIndex}: 지정 알림 정보를 찾을 수 없습니다.`);
+          }
+
+          notifications.push({
+            recipientId: sitterId,
+            careRequestId,
+            designatedRequestId,
+            type: "DESIGNATED_REQUEST_RECEIVED",
+            message: `${ownerNickname} 팟오너가 지정견적을 요청했어요!`,
+            createdAt: new Date(designated.createdAt),
+            unread: isOpen,
+          });
+
+          if (designated.rejectedAt !== null) {
+            notifications.push({
+              recipientId: ownerId,
+              careRequestId,
+              designatedRequestId,
+              type: "DESIGNATED_REQUEST_REJECTED",
+              message: `${sitterNickname} 팟트너가 요청을 반려했어요.`,
+              createdAt: new Date(designated.rejectedAt),
+              unread: isOpen,
+            });
+          }
+        }
+
+        // 팟트너: 견적 확정
+        if (request.status === "MATCHED" && request.confirmedSitterIndex !== null) {
+          const sitterId = sitterIdByIndex.get(request.confirmedSitterIndex);
+          const quoteId = quoteIdByRequestAndSitter.get(
+            `${requestIndex}:${request.confirmedSitterIndex}`,
+          );
+
+          if (sitterId === undefined || quoteId === undefined) {
+            throw new Error(`돌봄 요청 ${requestIndex}: 확정 알림 정보를 찾을 수 없습니다.`);
+          }
+
+          notifications.push({
+            recipientId: sitterId,
+            careRequestId,
+            quoteId,
+            type: "QUOTE_CONFIRMED",
+            message: `${ownerNickname} 팟오너가 내 견적을 확정했어요!`,
+            createdAt: new Date(request.updatedAt),
+            unread: requestIndex % 2 === 0,
+          });
+        }
+
+        // 팟트너: 받은 리뷰
+        const reviewId = reviewIdByRequestIndex.get(requestIndex);
+
+        if (reviewId !== undefined && request.review && request.confirmedSitterIndex !== null) {
+          const sitterId = sitterIdByIndex.get(request.confirmedSitterIndex);
+
+          if (sitterId === undefined) {
+            throw new Error(`돌봄 요청 ${requestIndex}: 리뷰 알림 대상을 찾을 수 없습니다.`);
+          }
+
+          notifications.push({
+            recipientId: sitterId,
+            careRequestId,
+            reviewId,
+            type: "REVIEW_RECEIVED",
+            message: `${ownerNickname} 팟오너가 리뷰를 작성했어요.`,
+            createdAt: new Date(request.review.createdAt),
+            unread: requestIndex % 2 === 0,
+          });
+        }
+
+        // 팟트너: 견적을 보낸 요청의 취소·만료
+        if (request.status === "CANCELED" || request.status === "EXPIRED") {
+          const isCanceled = request.status === "CANCELED";
+          const occurredAt = isCanceled ? request.canceledAt : request.updatedAt;
+
+          if (occurredAt === null) {
+            throw new Error(`돌봄 요청 ${requestIndex}: 취소 시각이 없습니다.`);
+          }
+
+          for (const quote of request.quotes) {
+            const sitterId = sitterIdByIndex.get(quote.sitterIndex);
+            const quoteId = quoteIdByRequestAndSitter.get(`${requestIndex}:${quote.sitterIndex}`);
+
+            if (sitterId === undefined || quoteId === undefined) {
+              throw new Error(`돌봄 요청 ${requestIndex}: 취소·만료 알림 정보를 찾을 수 없습니다.`);
+            }
+
+            notifications.push({
+              recipientId: sitterId,
+              careRequestId,
+              quoteId,
+              type: isCanceled ? "CARE_REQUEST_CANCELED" : "CARE_REQUEST_EXPIRED",
+              message: `${ownerNickname} 팟오너의 요청이 ${isCanceled ? "삭제 되었어요." : "만료 되었어요."}`,
+              createdAt: new Date(occurredAt),
+              unread: requestIndex % 2 === 0,
+            });
+          }
+        }
+      }
+
+      let notificationSeedCount = 0;
+
+      for (const notification of notifications) {
+        const existing = await tx.notification.findFirst({
+          where: buildDedupWhere(notification),
+        });
+
+        if (existing) {
+          continue;
+        }
+
+        await tx.notification.create({
+          data: {
+            recipientId: notification.recipientId,
+            careRequestId: notification.careRequestId,
+            quoteId: notification.quoteId ?? null,
+            designatedRequestId: notification.designatedRequestId ?? null,
+            reviewId: notification.reviewId ?? null,
+            type: notification.type,
+            message: notification.message,
+            readAt: notification.unread
+              ? null
+              : new Date(notification.createdAt.getTime() + 10 * 60_000),
+            createdAt: notification.createdAt,
+          },
+        });
+
+        notificationSeedCount++;
+      }
+
       console.log("생성 또는 연결한 팟오너:", ownerIdByIndex.size);
       console.log("생성 또는 연결한 팟트너:", sitterIdByIndex.size);
       console.log("현재 DB 사용자 수:", await tx.user.count());
@@ -559,6 +789,8 @@ async function main() {
       console.log("현재 DB 리뷰 수:", await tx.review.count());
       console.log("현재 DB 대화 수:", await tx.conversation.count());
       console.log("현재 DB 메시지 수:", await tx.message.count());
+      console.log("이번 실행에서 새로 만든 알림 수:", notificationSeedCount);
+      console.log("현재 DB 알림 수:", await tx.notification.count());
     },
     { timeout: 120_000 },
   );
