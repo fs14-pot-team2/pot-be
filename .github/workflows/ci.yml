@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   quality:
@@ -79,9 +80,149 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run test:integration
 
+  migration-package:
+    name: migration-package
+    needs: [quality, integration-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Prisma 마이그레이션 ZIP 생성
+        run: |
+          npm run package:migration
+          test -f artifacts/migration/prisma-migrate.zip
+
+      - name: AWS 권한 연결
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DB_MIGRATION_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: S3에 ZIP 업로드
+        env:
+          GIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          S3_KEY="migrations/dev/${GIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}/prisma-migrate.zip"
+
+          aws s3 cp \
+            artifacts/migration/prisma-migrate.zip \
+            "s3://pot-db-migration-artifacts-492562025293/${S3_KEY}" \
+            --region ap-northeast-2
+
+          echo "Migration ZIP uploaded: ${S3_KEY}"
+
+  migrate-dev-db:
+    name: migrate-dev-db
+    needs: [migration-package]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: AWS 권한 연결
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DB_MIGRATION_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: 최신 develop 커밋 확인
+        env:
+          MIGRATION_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          LATEST_SHA=$(git ls-remote \
+            https://github.com/${{ github.repository }}.git \
+            refs/heads/develop | cut -f1)
+
+          if [[ -z "$LATEST_SHA" ]]; then
+            echo "최신 develop 커밋 확인 실패"
+            exit 1
+          fi
+
+          if [[ "$MIGRATION_SHA" != "$LATEST_SHA" ]]; then
+            echo "더 최신 커밋이 있어 이전 마이그레이션을 건너뜁니다."
+            exit 1
+          fi
+
+          echo "최신 develop 커밋 확인 완료"
+
+      - name: CodeBuild 마이그레이션 실행
+        id: migration
+        env:
+          GIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          S3_KEY="migrations/dev/${GIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}/prisma-migrate.zip"
+
+          BUILD_ID=$(aws codebuild start-build \
+            --project-name pot-db-migrate-dev \
+            --environment-variables-override \
+              "name=MIGRATION_S3_KEY,value=${S3_KEY},type=PLAINTEXT" \
+            --query 'build.id' \
+            --output text)
+
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "CodeBuild started: $BUILD_ID"
+
+      - name: CodeBuild 성공 확인
+        env:
+          BUILD_ID: ${{ steps.migration.outputs.build_id }}
+        run: |
+          set -euo pipefail
+
+          for i in {1..90}; do
+            STATUS=$(aws codebuild batch-get-builds \
+              --ids "$BUILD_ID" \
+              --query 'builds[0].buildStatus' \
+              --output text)
+
+            echo "CodeBuild status: $STATUS"
+
+            if [ "$STATUS" = "SUCCEEDED" ]; then
+              echo "DEV_MIGRATION_SUCCEEDED"
+              exit 0
+            fi
+
+            if [[ "$STATUS" = "FAILED" ||
+                  "$STATUS" = "FAULT" ||
+                  "$STATUS" = "STOPPED" ||
+                  "$STATUS" = "TIMED_OUT" ]]; then
+              echo "DEV_MIGRATION_FAILED"
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          echo "CodeBuild wait timed out"
+          exit 1
+
   deploy:
     name: deploy
-    needs: [quality, integration-test]
+    needs: [quality, integration-test, migrate-dev-db]
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -110,6 +251,26 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ap-northeast-2
+
+      - name: 최신 develop 커밋 확인
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          LATEST_SHA=$(git ls-remote origin refs/heads/develop | cut -f1)
+
+          if [[ -z "$LATEST_SHA" ]]; then
+            echo "최신 develop 커밋을 확인하지 못했습니다."
+            exit 1
+          fi
+
+          if [[ "$DEPLOY_SHA" != "$LATEST_SHA" ]]; then
+            echo "더 최신 커밋이 존재하여 이전 배포를 중단합니다."
+            exit 1
+          fi
+
+          echo "최신 develop 커밋 확인 완료"
 
       - name: Elastic Beanstalk 배포
         uses: aws-actions/aws-elasticbeanstalk-deploy@v1

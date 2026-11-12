@@ -1,9 +1,10 @@
 import { Router } from "express";
 import {
   getConversationsController,
-  sendMessageController,
   getMessagesController,
   getUnreadStatusController,
+  readMessagesController,
+  sendMessageController,
 } from "../controllers/message-controller.js";
 import { authenticate } from "../middlewares/auth-middleware.js";
 
@@ -20,3 +21,10 @@ messageRouter.get("/conversations/with/:otherUserId/messages", authenticate, get
 
 // 전체 미확인 쪽지 존재 여부 조회
 messageRouter.get("/messages/me/unread", authenticate, getUnreadStatusController);
+
+// 쪽지 읽음 처리
+messageRouter.patch(
+  "/conversations/:conversationId/messages/read",
+  authenticate,
+  readMessagesController,
+);
