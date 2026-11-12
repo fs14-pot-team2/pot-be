@@ -80,7 +80,7 @@ export function findNotificationForRead(notificationId: bigint, db: DbClient = p
 }
 
 // 알림 단건 읽음 처리
-export function markNotificationAsRead(
+export function updateNotificationReadAt(
   notificationId: bigint,
   recipientId: bigint,
   readAt: Date,
@@ -97,5 +97,20 @@ export function markNotificationAsRead(
       id: true,
       readAt: true,
     },
+  });
+}
+
+// 본인 미확인 알림 일괄 읽음 처리
+export function updateNotificationsReadAt(
+  recipientId: bigint,
+  readAt: Date,
+  db: DbClient = prisma,
+) {
+  return db.notification.updateMany({
+    where: {
+      recipientId,
+      readAt: null,
+    },
+    data: { readAt },
   });
 }
