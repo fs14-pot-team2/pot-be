@@ -213,6 +213,29 @@ describe("지정 요청 생성", () => {
       assert.equal(rejected.length, 1);
       assert.ok(assertAppError("DESIGNATED_REQUEST_LIMIT_EXCEEDED")(rejected[0].reason));
       assert.equal(await prisma.designatedRequest.count({ where: { careRequestId } }), 3);
+
+      const savedRequests = await prisma.designatedRequest.findMany({
+        where: { careRequestId },
+      });
+
+      const notifications = await prisma.notification.findMany({
+        where: {
+          careRequestId,
+          type: "DESIGNATED_REQUEST_RECEIVED",
+        },
+      });
+
+      assert.equal(notifications.length, 3);
+
+      for (const savedRequest of savedRequests) {
+        const matchingNotifications = notifications.filter(
+          (notification) =>
+            notification.designatedRequestId === savedRequest.id &&
+            notification.recipientId === savedRequest.sitterId,
+        );
+
+        assert.equal(matchingNotifications.length, 1);
+      }
     });
 
     // 동일 팟트너의 동시 요청은 한 건만 저장하는지 확인
@@ -234,6 +257,23 @@ describe("지정 요청 생성", () => {
       assert.equal(rejected.length, 1);
       assert.ok(assertAppError("DESIGNATED_REQUEST_ALREADY_EXISTS")(rejected[0].reason));
       assert.equal(await prisma.designatedRequest.count({ where: { careRequestId, sitterId } }), 1);
+
+      const savedRequest = await prisma.designatedRequest.findUniqueOrThrow({
+        where: {
+          careRequestId_sitterId: { careRequestId, sitterId },
+        },
+      });
+
+      const notifications = await prisma.notification.findMany({
+        where: {
+          careRequestId,
+          type: "DESIGNATED_REQUEST_RECEIVED",
+        },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0].recipientId, sitterId);
+      assert.equal(notifications[0].designatedRequestId, savedRequest.id);
     });
 
     // 트랜잭션 중간 실패 시 생성된 지정 요청이 롤백되는지 확인

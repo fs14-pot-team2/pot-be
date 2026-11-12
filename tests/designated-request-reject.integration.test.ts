@@ -265,7 +265,7 @@ describe("지정 요청 반려", () => {
   describe("동시성 및 트랜잭션", () => {
     // 동일 지정 요청을 동시에 반려해도 반려 이력이 한 건만 생성되는지 확인
     it("동일 지정 요청의 동시 반려 시 중복 생성을 방지한다", async () => {
-      const { sitterId, designatedRequestId } = await createTestRequest();
+      const { ownerId, sitterId, careRequestId, designatedRequestId } = await createTestRequest();
 
       const results = await Promise.allSettled([
         rejectDesignatedRequest(sitterId, designatedRequestId, rejectionReason),
@@ -282,6 +282,17 @@ describe("지정 요청 반려", () => {
       assert.ok(assertAppError("DESIGNATED_REQUEST_ALREADY_REJECTED")(rejected[0].reason));
 
       assert.equal(await prisma.rejectedRequest.count({ where: { designatedRequestId } }), 1);
+
+      const notifications = await prisma.notification.findMany({
+        where: {
+          careRequestId,
+          designatedRequestId,
+          type: "DESIGNATED_REQUEST_REJECTED",
+        },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0].recipientId, ownerId);
     });
 
     // 반려 이력 생성 이후 트랜잭션 실패 시 저장 결과가 롤백되는지 확인
