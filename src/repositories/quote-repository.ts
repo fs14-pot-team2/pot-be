@@ -34,14 +34,28 @@ export function insertQuote(
   });
 }
 
+const QUOTE_BASE_SELECT = {
+  id: true,
+  careRequestId: true,
+  sitterId: true,
+} as const;
+
 // 견적 조회
 export function findQuote(quoteId: bigint, db: DbClient = prisma) {
   return db.quote.findUnique({
     where: { id: quoteId },
+    select: QUOTE_BASE_SELECT,
+  });
+}
+
+// 견적 수정 시 변경 여부 확인을 위한 조회
+export function findQuoteForUpdate(quoteId: bigint, db: DbClient = prisma) {
+  return db.quote.findUnique({
+    where: { id: quoteId },
     select: {
-      id: true,
-      careRequestId: true,
-      sitterId: true,
+      ...QUOTE_BASE_SELECT,
+      price: true,
+      comment: true,
     },
   });
 }
