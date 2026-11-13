@@ -161,6 +161,7 @@ describe("리뷰 생성", () => {
     );
   });
 
+  // 동시 리뷰 생성 시 하나만 성공하고 중복 알림 없이 기존 도메인 오류를 유지하는지 확인
   it("동시에 두 번 요청해도 하나만 성공하고 나머지는 REVIEW_ALREADY_EXISTS다", async () => {
     const ownerId = await createUser("race-owner", "OWNER");
     const sitterId = await createUser("race-sitter", "SITTER");
@@ -174,6 +175,22 @@ describe("리뷰 생성", () => {
     assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
     const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
     assert.ok(assertAppError("REVIEW_ALREADY_EXISTS", 409)(rejected.reason));
+
+    const reviews = await prisma.review.findMany({
+      where: { careRequestId },
+    });
+
+    const notifications = await prisma.notification.findMany({
+      where: {
+        careRequestId,
+        type: "REVIEW_RECEIVED",
+      },
+    });
+
+    assert.equal(reviews.length, 1);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].recipientId, sitterId);
+    assert.equal(notifications[0].reviewId, reviews[0].id);
   });
 
   it("UNIQUE 충돌 에러에서 제약 이름을 추출한다", async () => {
