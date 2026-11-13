@@ -328,6 +328,11 @@ export const ERROR_DEFINITIONS = {
     message: "이미 작성한 리뷰가 있습니다.",
     statusCode: 409,
   },
+  REVIEW_ALREADY_DELETED: {
+    code: "REVIEW_ALREADY_DELETED",
+    message: "삭제한 리뷰는 다시 작성할 수 없습니다.",
+    statusCode: 409,
+  },
   REVIEW_ACCESS_FORBIDDEN: {
     code: "REVIEW_ACCESS_FORBIDDEN",
     message: "해당 리뷰를 수정하거나 삭제할 권한이 없습니다.",
