@@ -4,19 +4,17 @@ import { CareRequestStatus } from "../generated/prisma/enums.js";
 import {
   confirmCareRequest,
   findCareRequest,
-  findSitterProfileIdByUserId,
-  findSitterProfileWithRegions,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
 import {
   findDesignatedRequestByCareRequestAndSitter,
-  findQuoteByCareRequestAndSitter,
   findRejectedRequestByDesignatedRequestId,
 } from "../repositories/designated-request-repository.js";
 import {
   countGeneralQuotesByCareRequest,
   countSentQuotes,
   findQuote,
+  findQuoteByCareRequestAndSitter,
   findQuoteDetail,
   findQuoteForConfirmation,
   findQuoteForUpdate,
@@ -25,7 +23,11 @@ import {
   updateQuote,
 } from "../repositories/quote-repository.js";
 import { findIgnoredRequestByCareRequestAndSitter } from "../repositories/ignored-request-repository.js";
-import { lockSitterProfileByUserId } from "../repositories/profile-repository.js";
+import {
+  findSitterProfileIdByUserId,
+  findSitterProfileWithRegions,
+  lockSitterProfileByUserId,
+} from "../repositories/profile-repository.js";
 import { insertNotification } from "../repositories/notification-repository.js";
 import { findUserById } from "../repositories/user-repository.js";
 import type { TransactionRunner } from "../types/db.js";

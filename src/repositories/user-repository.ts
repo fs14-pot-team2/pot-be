@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma.js";
+import { UserRole as DesignatedRequestUserRole } from "../generated/prisma/enums.js";
 import type { DbClient } from "../types/db.js";
 import type { UserRole } from "../types/auth.js";
 
@@ -54,5 +55,16 @@ export function updateUserById(
     where: { id: userId },
     data,
     select: { id: true, role: true, email: true, nickname: true, updatedAt: true },
+  });
+}
+
+// 지정 요청을 받을 팟트너의 존재 및 역할 확인
+export function findSitterByIdAndRole(sitterId: bigint, db: DbClient = prisma) {
+  return db.user.findFirst({
+    where: {
+      id: sitterId,
+      role: DesignatedRequestUserRole.SITTER,
+    },
+    select: { id: true },
   });
 }

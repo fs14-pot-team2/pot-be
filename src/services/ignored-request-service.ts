@@ -3,18 +3,18 @@ import { CareRequestStatus } from "../generated/prisma/enums.js";
 import AppError from "../errors/app-error.js";
 import {
   findCareRequest,
-  findSitterProfileWithRegions,
   lockCareRequestForUpdate,
 } from "../repositories/care-request-repository.js";
-import {
-  findDesignatedRequestByCareRequestAndSitter,
-  findQuoteByCareRequestAndSitter,
-} from "../repositories/designated-request-repository.js";
+import { findDesignatedRequestByCareRequestAndSitter } from "../repositories/designated-request-repository.js";
 import {
   findIgnoredRequestByCareRequestAndSitter,
   insertIgnoredRequest,
 } from "../repositories/ignored-request-repository.js";
-import { lockSitterProfileByUserId } from "../repositories/profile-repository.js";
+import {
+  findSitterProfileWithRegions,
+  lockSitterProfileByUserId,
+} from "../repositories/profile-repository.js";
+import { findQuoteByCareRequestAndSitter } from "../repositories/quote-repository.js";
 import type { TransactionRunner } from "../types/db.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";

@@ -184,7 +184,8 @@ describe("돌봄 요청 취소", () => {
   describe("동시성 및 트랜잭션", () => {
     // 동일 요청을 동시에 취소해도 한 번만 성공하고 취소 결과를 유지하는지 확인
     it("동일 요청의 동시 취소 시 중복 취소를 방지한다", async () => {
-      const { ownerId, careRequestId } = await createTestRequest();
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+      await createTestQuote(careRequestId, sitterId);
 
       const results = await Promise.allSettled([
         cancelCareRequestService(ownerId, careRequestId),
@@ -216,6 +217,13 @@ describe("돌봄 요청 취소", () => {
       assert.ok(succeeded[0].value.canceledAt instanceof Date);
 
       assert.equal(succeeded[0].value.canceledAt.getTime(), savedRequest.canceledAt.getTime());
+
+      const notifications = await prisma.notification.findMany({
+        where: { careRequestId, type: "CARE_REQUEST_CANCELED" },
+      });
+
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0].recipientId, sitterId);
     });
 
     // 취소와 견적 확정의 실행 순서를 각각 고정하여 하나의 상태 변경만 허용하는지 확인
@@ -254,6 +262,16 @@ describe("돌봄 요청 취소", () => {
         }
 
         assert.equal(await prisma.quote.count({ where: { careRequestId } }), 1);
+
+        const notifications = await prisma.notification.findMany({
+          where: { careRequestId, type: "CARE_REQUEST_CANCELED" },
+        });
+
+        assert.equal(notifications.length, firstOperation === "CANCEL" ? 1 : 0);
+
+        if (firstOperation === "CANCEL") {
+          assert.equal(notifications[0].recipientId, sitterId);
+        }
       });
     }
 
@@ -306,6 +324,16 @@ describe("돌봄 요청 취소", () => {
           assert.equal(firstResult.value.careRequestId, careRequestId);
           assert.equal(quotes[0].careRequestId, careRequestId);
         }
+
+        const notifications = await prisma.notification.findMany({
+          where: { careRequestId, type: "CARE_REQUEST_CANCELED" },
+        });
+
+        assert.equal(notifications.length, firstOperation === "CREATE" ? 1 : 0);
+
+        if (firstOperation === "CREATE") {
+          assert.equal(notifications[0].recipientId, sitterId);
+        }
       });
     }
 
@@ -346,6 +374,13 @@ describe("돌봄 요청 취소", () => {
         assert.equal(savedRequest.status, "CANCELED");
         assert.ok(savedRequest.canceledAt instanceof Date);
         assert.equal(savedQuote.price, firstOperation === "UPDATE" ? 25000 : quote.price);
+
+        const notifications = await prisma.notification.findMany({
+          where: { careRequestId, type: "CARE_REQUEST_CANCELED" },
+        });
+
+        assert.equal(notifications.length, 1);
+        assert.equal(notifications[0].recipientId, sitterId);
       });
     }
 
