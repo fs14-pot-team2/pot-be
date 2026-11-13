@@ -134,4 +134,39 @@ describe("팟트너 집계", () => {
     assert.equal(aggregates.get(withoutReview.id)?.reviewCount, 0);
     assert.equal(aggregates.get(withoutReview.id)?.confirmedQuoteCount, 0);
   });
+
+  it("삭제된 리뷰는 평균 별점과 리뷰 수에서 제외한다", async () => {
+    const owner = await createUser("OWNER", "agg-softdel-owner");
+    const sitter = await createUser("SITTER", "agg-softdel-sitter");
+    const first = await createQuotedRequest(owner.id, sitter.id, true);
+    const second = await createQuotedRequest(owner.id, sitter.id, true);
+
+    await prisma.review.create({
+      data: {
+        careRequestId: first.id,
+        ownerId: owner.id,
+        sitterId: sitter.id,
+        rating: 5,
+        content: "유지되는 리뷰",
+      },
+    });
+    await prisma.review.create({
+      data: {
+        careRequestId: second.id,
+        ownerId: owner.id,
+        sitterId: sitter.id,
+        rating: 1,
+        content: "삭제된 리뷰",
+        deletedAt: new Date(),
+      },
+    });
+
+    const aggregates = await getSitterAggregates([sitter.id]);
+
+    assert.deepEqual(aggregates.get(sitter.id), {
+      averageRating: 5,
+      reviewCount: 1,
+      confirmedQuoteCount: 2,
+    });
+  });
 });

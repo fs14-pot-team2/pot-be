@@ -161,6 +161,24 @@ describe("리뷰 생성", () => {
     );
   });
 
+  it("삭제한 리뷰가 있는 요청은 REVIEW_ALREADY_DELETED를 반환하고 재작성할 수 없다", async () => {
+    const ownerId = await createUser("del-owner", "OWNER");
+    const sitterId = await createUser("del-sitter", "SITTER");
+    const careRequestId = await createMatchedRequest(ownerId, sitterId, -1);
+    const created = await createReview(ownerId, careRequestId, input);
+    await prisma.review.update({
+      where: { id: BigInt(created.id) },
+      data: { deletedAt: new Date() },
+    });
+
+    await assert.rejects(
+      () => createReview(ownerId, careRequestId, input),
+      assertAppError("REVIEW_ALREADY_DELETED", 409),
+    );
+
+    assert.equal(await prisma.review.count({ where: { careRequestId } }), 1);
+  });
+
   // 동시 리뷰 생성 시 하나만 성공하고 중복 알림 없이 기존 도메인 오류를 유지하는지 확인
   it("동시에 두 번 요청해도 하나만 성공하고 나머지는 REVIEW_ALREADY_EXISTS다", async () => {
     const ownerId = await createUser("race-owner", "OWNER");
