@@ -3,7 +3,7 @@ import { prisma } from "../config/prisma.js";
 export function groupReviewStats(sitterIds: bigint[]) {
   return prisma.review.groupBy({
     by: ["sitterId"],
-    where: { sitterId: { in: sitterIds } },
+    where: { sitterId: { in: sitterIds }, deletedAt: null },
     _avg: { rating: true },
     _count: { _all: true },
   });

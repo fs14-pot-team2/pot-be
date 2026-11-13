@@ -14,7 +14,7 @@ export const existsSitterProfileByUserId = async (userId: bigint) => {
 // 팟트너가 받은 리뷰 목록 (최신순, 같은 시각이면 id 내림차순)
 export const findReviewsBySitterId = (sitterId: bigint, skip: number, take: number) => {
   return prisma.review.findMany({
-    where: { sitterId },
+    where: { sitterId, deletedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip,
     take,
@@ -32,7 +32,7 @@ export const findReviewsBySitterId = (sitterId: bigint, skip: number, take: numb
 export const groupRatingDistribution = (sitterId: bigint) => {
   return prisma.review.groupBy({
     by: ["rating"],
-    where: { sitterId },
+    where: { sitterId, deletedAt: null },
     _count: { _all: true },
   });
 };
@@ -51,11 +51,11 @@ export function findCareRequestForReview(careRequestId: bigint, db: DbClient = p
   });
 }
 
-// 돌봄 요청당 리뷰 존재 여부
+// 돌봄 요청당 리뷰 존재 여부 (삭제된 리뷰도 조회: 재작성 차단용)
 export function findReviewByCareRequestId(careRequestId: bigint, db: DbClient = prisma) {
   return db.review.findUnique({
     where: { careRequestId },
-    select: { id: true },
+    select: { id: true, deletedAt: true },
   });
 }
 
@@ -74,6 +74,7 @@ export function insertReview(
 }
 
 // 작성 가능한 리뷰 조건 (목록과 개수가 같은 조건을 쓰도록 공유)
+// 소프트 삭제된 리뷰도 행이 남아 있어 review is null에 걸리지 않으므로 목록에서 제외
 const writableWhere = (ownerId: bigint, today: Date) => ({
   ownerId,
   status: CareRequestStatus.MATCHED,
@@ -124,7 +125,7 @@ export const countWritableCareRequests = (ownerId: bigint, today: Date) => {
 // 팟오너가 작성한 리뷰 목록 (최신순, 같은 시각이면 id 내림차순)
 export const findReviewsByOwnerId = (ownerId: bigint, skip: number, take: number) => {
   return prisma.review.findMany({
-    where: { ownerId },
+    where: { ownerId, deletedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip,
     take,
@@ -159,12 +160,12 @@ export const findReviewsByOwnerId = (ownerId: bigint, skip: number, take: number
 
 // 팟오너가 작성한 리뷰 개수
 export const countReviewsByOwnerId = (ownerId: bigint) => {
-  return prisma.review.count({ where: { ownerId } });
+  return prisma.review.count({ where: { ownerId, deletedAt: null } });
 };
 // 수정·삭제 권한 확인용 리뷰 조회
 export function findReviewOwnerById(reviewId: bigint, db: DbClient = prisma) {
-  return db.review.findUnique({
-    where: { id: reviewId },
+  return db.review.findFirst({
+    where: { id: reviewId, deletedAt: null },
     select: { id: true, ownerId: true },
   });
 }
@@ -175,10 +176,13 @@ export function updateReviewById(
   data: { rating?: number; content?: string },
   db: DbClient = prisma,
 ) {
-  return db.review.update({ where: { id: reviewId }, data });
+  return db.review.update({ where: { id: reviewId, deletedAt: null }, data });
 }
 
-// 리뷰 삭제 (하드 삭제)
+// 리뷰 삭제 (소프트 삭제, 이미 삭제된 리뷰면 P2025)
 export function deleteReviewById(reviewId: bigint, db: DbClient = prisma) {
-  return db.review.delete({ where: { id: reviewId } });
+  return db.review.update({
+    where: { id: reviewId, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
 }
