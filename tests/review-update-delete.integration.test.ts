@@ -4,7 +4,12 @@ import { describe, it } from "node:test";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
-import { deleteReview, getSitterReviews, updateReview } from "../src/services/review-service.js";
+import {
+  deleteReview,
+  getSitterReviews,
+  getWritableReviews,
+  updateReview,
+} from "../src/services/review-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
 const PREFIX = `ru-${randomUUID().slice(0, 8)}`;
@@ -191,16 +196,29 @@ describe("내가 작성한 리뷰 수정", () => {
       assertAppError("REVIEW_NOT_FOUND", 404),
     );
   });
+  it("삭제된 리뷰는 수정할 수 없다", async () => {
+    const { ownerId, review } = await setupReview("up-deleted", { rating: 5 });
+    await deleteReview(ownerId, review.id);
+
+    await assert.rejects(
+      () => updateReview(ownerId, review.id, { rating: 1 }),
+      assertAppError("REVIEW_NOT_FOUND", 404),
+    );
+
+    const saved = await prisma.review.findUnique({ where: { id: review.id } });
+    assert.equal(saved?.rating, 5);
+  });
 });
 
 describe("내가 작성한 리뷰 삭제", () => {
-  it("메시지를 반환하고 리뷰를 실제로 삭제하며 돌봄 요청은 유지한다", async () => {
+  it("메시지를 반환하고 리뷰를 소프트 삭제하며 돌봄 요청은 유지한다", async () => {
     const { ownerId, careRequestId, review } = await setupReview("del-ok");
 
     const result = await deleteReview(ownerId, review.id);
 
     assert.deepEqual(result, { message: "리뷰가 삭제되었습니다." });
-    assert.equal(await prisma.review.findUnique({ where: { id: review.id } }), null);
+    const deleted = await prisma.review.findUnique({ where: { id: review.id } });
+    assert.ok(deleted?.deletedAt instanceof Date); // 행은 남고 deletedAt만 기록된다
     assert.ok(await prisma.careRequest.findUnique({ where: { id: careRequestId } }));
   });
 
@@ -262,6 +280,15 @@ describe("내가 작성한 리뷰 삭제", () => {
     assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
     assert.equal(rejected.length, 1);
     assert.ok(assertAppError("REVIEW_NOT_FOUND", 404)(rejected[0].reason));
-    assert.equal(await prisma.review.findUnique({ where: { id: review.id } }), null);
+    const saved = await prisma.review.findUnique({ where: { id: review.id } });
+    assert.ok(saved?.deletedAt instanceof Date);
+  });
+  it("삭제해도 이력이 남아 작성 가능 목록에 다시 나타나지 않는다", async () => {
+    const { ownerId, review } = await setupReview("del-history");
+
+    await deleteReview(ownerId, review.id);
+
+    const writable = await getWritableReviews(ownerId, 1, 8);
+    assert.equal(writable.totalCount, 0);
   });
 });
