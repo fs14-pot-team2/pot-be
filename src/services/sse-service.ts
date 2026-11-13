@@ -37,18 +37,27 @@ export function publishToUser<E extends SseEventName>(
   event: E,
   data: SseEventPayloads[E],
 ): void {
-  const connections = clients.get(userId.toString());
+  const key = userId.toString();
+  const connections = clients.get(key);
   if (!connections) return;
 
   const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 
   for (const response of connections) {
+    if (response.writableEnded || response.destroyed) {
+      connections.delete(response);
+      continue;
+    }
     try {
       response.write(frame);
     } catch (error) {
-      // 끊어진 연결의 정리는 컨트롤러의 close 핸들러가 담당한다.
       console.error("SSE 이벤트 전송에 실패했습니다.", error);
     }
+  }
+
+  // 닫힌 연결을 정리한 뒤 비어 있으면 사용자 키도 제거
+  if (connections.size === 0) {
+    clients.delete(key);
   }
 }
 

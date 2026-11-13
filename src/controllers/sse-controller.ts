@@ -39,18 +39,33 @@ export function connectEventsController(request: Request, response: Response, ne
 
   addSseClient(user.id, response);
 
+  let cleaned = false;
+
+  // 여러 경로(close, error, 만료)에서 불려도 한 번만 실행
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    clearInterval(heartbeat);
+    clearTimeout(expiryTimer);
+    removeSseClient(user.id, response);
+  };
+
   const heartbeat = setInterval(() => {
+    if (response.writableEnded || response.destroyed) return cleanup();
     response.write(": ping\n\n");
   }, HEARTBEAT_INTERVAL_MS);
 
   // 액세스 토큰이 만료되면 연결을 닫아, 프론트가 토큰을 갱신한 뒤 다시 연결하게 한다.
   const msUntilExpiry = getMsUntilTokenExpiry(request);
   const expiryTimer =
-    msUntilExpiry === null ? null : setTimeout(() => response.end(), msUntilExpiry);
+    msUntilExpiry === null
+      ? undefined
+      : setTimeout(() => {
+          cleanup();
+          response.end();
+        }, msUntilExpiry);
 
-  request.on("close", () => {
-    clearInterval(heartbeat);
-    if (expiryTimer) clearTimeout(expiryTimer);
-    removeSseClient(user.id, response);
-  });
+  request.on("close", cleanup);
+  response.on("close", cleanup);
+  response.on("error", cleanup);
 }
