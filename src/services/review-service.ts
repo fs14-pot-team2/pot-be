@@ -103,8 +103,11 @@ export async function createReview(
     throw new AppError("REVIEW_NOT_WRITABLE");
   }
 
-  if (await findReviewByCareRequestId(careRequestId)) {
-    throw new AppError("REVIEW_ALREADY_EXISTS");
+  const existingReview = await findReviewByCareRequestId(careRequestId);
+  if (existingReview) {
+    throw new AppError(
+      existingReview.deletedAt ? "REVIEW_ALREADY_DELETED" : "REVIEW_ALREADY_EXISTS",
+    );
   }
 
   const sitterId = careRequest.confirmedQuote.sitterId;
