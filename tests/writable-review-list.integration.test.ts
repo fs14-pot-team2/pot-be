@@ -150,6 +150,27 @@ describe("작성 가능한 리뷰 목록 조회", () => {
     assert.equal(result.totalCount, 1);
   });
 
+  it("삭제한 리뷰의 요청은 목록에 나타나지 않는다", async () => {
+    const ownerId = await createUser("softdel-owner", "OWNER");
+    const sitterId = await createUser("softdel-sitter", "SITTER");
+    const { careRequestId } = await createMatchedRequest(ownerId, sitterId, -1);
+    await prisma.review.create({
+      data: {
+        careRequestId,
+        ownerId,
+        sitterId,
+        rating: 5,
+        content: "삭제될 리뷰",
+        deletedAt: new Date(),
+      },
+    });
+
+    const result = await getWritableReviews(ownerId, 1, 8);
+
+    assert.deepEqual(result.items, []);
+    assert.equal(result.totalCount, 0);
+  });
+
   it("종료일 최신순이고 같은 날이면 id 내림차순이다", async () => {
     const ownerId = await createUser("sort-owner", "OWNER");
     const sitterId = await createUser("sort-sitter", "SITTER");

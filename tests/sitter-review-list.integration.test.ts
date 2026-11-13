@@ -194,6 +194,24 @@ describe("팟트너 리뷰 목록 조회", () => {
         "1": 0,
       });
     });
+
+    it("삭제된 리뷰는 목록, 평균 별점, 리뷰 수, 별점 분포에서 제외한다", async () => {
+      const sitterId = await createSitter("softdel-sitter");
+      const owner = await createOwner("softdel-owner");
+      const [kept, removed] = await addReviews(sitterId, owner.id, [{ rating: 5 }, { rating: 1 }]);
+      await prisma.review.update({ where: { id: removed! }, data: { deletedAt: new Date() } });
+
+      const result = await getSitterReviews(sitterId, 1, 8);
+
+      assert.deepEqual(
+        result.items.map((item) => item.review.id),
+        [kept!.toString()],
+      );
+      assert.equal(result.summary.reviewCount, 1);
+      assert.equal(result.summary.averageRating, 5);
+      assert.equal(result.summary.ratingDistribution["1"], 0);
+      assert.equal(result.totalCount, 1);
+    });
   });
 
   describe("정렬", () => {

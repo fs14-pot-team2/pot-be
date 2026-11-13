@@ -160,6 +160,24 @@ describe("내가 작성한 리뷰 목록 조회", () => {
     assert.equal(result.totalCount, 1);
   });
 
+  it("삭제된 리뷰는 목록과 totalCount에서 제외한다", async () => {
+    const ownerId = await createUser("softdel-owner", "OWNER");
+    const sitterId = await createUser("softdel-sitter", "SITTER");
+    const kept = await createMatchedRequest(ownerId, sitterId, -1);
+    const removed = await createMatchedRequest(ownerId, sitterId, -2);
+    await createReview(kept.careRequestId, ownerId, sitterId);
+    const target = await createReview(removed.careRequestId, ownerId, sitterId);
+    await prisma.review.update({ where: { id: target.id }, data: { deletedAt: new Date() } });
+
+    const result = await getMyReviews(ownerId, 1, 8);
+
+    assert.deepEqual(
+      result.items.map((item) => item.careRequest.id),
+      [kept.careRequestId.toString()],
+    );
+    assert.equal(result.totalCount, 1);
+  });
+
   it("작성일 최신순이고 같은 시각이면 id 내림차순이다", async () => {
     const ownerId = await createUser("sort-owner", "OWNER");
     const sitterId = await createUser("sort-sitter", "SITTER");
