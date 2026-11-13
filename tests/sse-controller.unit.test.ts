@@ -4,14 +4,21 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it, mock } from "node:test";
 
+import express from "express";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
-import { app } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { connectEventsController } from "../src/controllers/sse-controller.js";
+import { errorMiddleware } from "../src/middlewares/error-middleware.js";
+import { sseRouter } from "../src/routes/sse-routes.js";
 import { getSseConnectionCount, publishToUser } from "../src/services/sse-service.js";
 import { signAccessToken } from "../src/utils/jwt.js";
+
+// 전체 app(Prisma 의존)을 올리지 않고 SSE 라우터만 구성
+const app = express();
+app.use("/events", sseRouter);
+app.use(errorMiddleware);
 
 const decoder = new TextDecoder();
 
@@ -43,6 +50,8 @@ async function readUntil(
     }
     return received;
   })();
+  // 타임아웃 뒤 abort()로 read가 거부돼도 처리되지 않은 rejection이 되지 않게 한다.
+  read.catch(() => {});
   try {
     return await Promise.race([read, timeout]);
   } finally {
@@ -50,7 +59,7 @@ async function readUntil(
   }
 }
 
-describe("GET /events (HTTP 통합)", () => {
+describe("GET /events (HTTP)", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -103,97 +112,109 @@ describe("GET /events (HTTP 통합)", () => {
   // 기준 1, 5: 정상 연결
   it("정상 토큰이면 event-stream으로 연결된다", async () => {
     const controller = new AbortController();
-    const token = signAccessToken({ sub: "101", role: "OWNER" });
+    try {
+      const token = signAccessToken({ sub: "101", role: "OWNER" });
 
-    const response = await connect(token, controller.signal);
-    assert.equal(response.status, 200);
-    assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
-    assert.equal(response.headers.get("x-accel-buffering"), "no");
+      const response = await connect(token, controller.signal);
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+      assert.equal(response.headers.get("x-accel-buffering"), "no");
 
-    const reader = response.body!.getReader();
-    await readUntil(reader, ": connected");
-    assert.equal(getSseConnectionCount(), 1);
-
-    controller.abort();
-    await waitFor(() => getSseConnectionCount() === 0);
+      const reader = response.body!.getReader();
+      await readUntil(reader, ": connected");
+      assert.equal(getSseConnectionCount(), 1);
+    } finally {
+      controller.abort();
+      await waitFor(() => getSseConnectionCount() === 0);
+    }
   });
 
   // 기준 5: 연결 종료 시 정리
   it("클라이언트가 연결을 끊으면 등록된 연결이 정리된다", async () => {
     const controller = new AbortController();
-    const response = await connect(
-      signAccessToken({ sub: "102", role: "SITTER" }),
-      controller.signal,
-    );
-    await readUntil(response.body!.getReader(), ": connected");
-    assert.equal(getSseConnectionCount(), 1);
-
-    controller.abort();
-    await waitFor(() => getSseConnectionCount() === 0);
+    try {
+      const response = await connect(
+        signAccessToken({ sub: "102", role: "SITTER" }),
+        controller.signal,
+      );
+      await readUntil(response.body!.getReader(), ": connected");
+      assert.equal(getSseConnectionCount(), 1);
+    } finally {
+      controller.abort();
+      await waitFor(() => getSseConnectionCount() === 0);
+    }
   });
 
   // 기준 5: 해당 사용자만 이벤트 수신
   it("발행한 사용자의 연결만 이벤트를 받는다", async () => {
     const controllerA = new AbortController();
     const controllerB = new AbortController();
-    const responseA = await connect(
-      signAccessToken({ sub: "201", role: "OWNER" }),
-      controllerA.signal,
-    );
-    const responseB = await connect(
-      signAccessToken({ sub: "202", role: "SITTER" }),
-      controllerB.signal,
-    );
-    const readerA = responseA.body!.getReader();
-    const readerB = responseB.body!.getReader();
-    await readUntil(readerA, ": connected");
-    await readUntil(readerB, ": connected");
+    try {
+      const responseA = await connect(
+        signAccessToken({ sub: "201", role: "OWNER" }),
+        controllerA.signal,
+      );
+      const responseB = await connect(
+        signAccessToken({ sub: "202", role: "SITTER" }),
+        controllerB.signal,
+      );
+      const readerA = responseA.body!.getReader();
+      const readerB = responseB.body!.getReader();
+      await readUntil(readerA, ": connected");
+      await readUntil(readerB, ": connected");
 
-    publishToUser(201n, "message.created", {
-      conversationId: "45",
-      messageId: "678",
-      senderId: "202",
-    });
+      publishToUser(201n, "message.created", {
+        conversationId: "45",
+        messageId: "678",
+        senderId: "202",
+      });
 
-    const received = await readUntil(readerA, "event: message.created");
-    assert.ok(
-      received.includes('data: {"conversationId":"45","messageId":"678","senderId":"202"}'),
-    );
+      const received = await readUntil(readerA, "event: message.created");
+      assert.ok(
+        received.includes('data: {"conversationId":"45","messageId":"678","senderId":"202"}'),
+      );
 
-    // 다른 사용자는 짧은 시간 안에 아무것도 받지 않아야 한다
-    await assert.rejects(readUntil(readerB, "message.created", 300), /수신 시간 초과/);
-
-    controllerA.abort();
-    controllerB.abort();
-    await waitFor(() => getSseConnectionCount() === 0);
+      // 다른 사용자는 짧은 시간 안에 아무것도 받지 않아야 한다
+      await assert.rejects(readUntil(readerB, "message.created", 300), /수신 시간 초과/);
+    } finally {
+      controllerA.abort();
+      controllerB.abort();
+      await waitFor(() => getSseConnectionCount() === 0);
+    }
   });
 
   // 기준 4: 토큰 만료 시 서버가 연결 종료 (실제 타이머, 약 2초 소요)
   it("액세스 토큰이 만료되면 서버가 스트림을 종료한다", async () => {
-    const shortLived = jwt.sign({ sub: "301", role: "OWNER" }, env.jwtAccessSecret, {
-      algorithm: "HS256",
-      expiresIn: 2,
-    });
-    const response = await connect(shortLived);
-    assert.equal(response.status, 200);
-    const reader = response.body!.getReader();
+    const controller = new AbortController();
+    try {
+      const shortLived = jwt.sign({ sub: "301", role: "OWNER" }, env.jwtAccessSecret, {
+        algorithm: "HS256",
+        expiresIn: 2,
+      });
+      const response = await connect(shortLived, controller.signal);
+      assert.equal(response.status, 200);
+      const reader = response.body!.getReader();
 
-    const ended = (async () => {
-      while (true) {
-        const { done } = await reader.read();
-        if (done) return true;
-      }
-    })();
-    const timeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5_000));
+      const ended = (async () => {
+        while (true) {
+          const { done } = await reader.read();
+          if (done) return true;
+        }
+      })();
+      ended.catch(() => {});
+      const timeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5_000));
 
-    assert.equal(await Promise.race([ended, timeout]), true);
-    await waitFor(() => getSseConnectionCount() === 0);
+      assert.equal(await Promise.race([ended, timeout]), true);
+    } finally {
+      controller.abort();
+      await waitFor(() => getSseConnectionCount() === 0);
+    }
   });
 });
 
 // 기준 4: heartbeat와 만료 종료를 가짜 타이머로 검증 (HTTP 없이 컨트롤러 직접 호출)
 describe("connectEventsController 타이머", () => {
-  function createFakeConnection(token: string) {
+  function createFakeConnection(token: string, options: { failPing?: boolean } = {}) {
     const listeners = new Map<string, Array<() => void>>();
     const written: string[] = [];
     let ended = false;
@@ -218,6 +239,7 @@ describe("connectEventsController 타이머", () => {
       },
       flushHeaders() {},
       write(chunk: string) {
+        if (options.failPing && chunk === ": ping\n\n") throw new Error("write failed");
         written.push(chunk);
         return true;
       },
@@ -254,9 +276,27 @@ describe("connectEventsController 타이머", () => {
       mock.timers.tick(25_000);
       assert.equal(connection.written.length, initialWrites + 2);
 
-      connection.emit("close"); // 클라이언트 종료
+      connection.emit("close");
       mock.timers.tick(50_000);
       assert.equal(connection.written.length, initialWrites + 2);
+      assert.equal(getSseConnectionCount(), 0);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it("heartbeat 전송이 실패하면 예외 없이 연결을 정리한다", () => {
+    mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"], now: Date.now() });
+    try {
+      const token = jwt.sign({ sub: "401", role: "OWNER" }, env.jwtAccessSecret, {
+        expiresIn: 600,
+      });
+      const connection = createFakeConnection(token, { failPing: true });
+
+      connectEventsController(connection.request, connection.response, () => {});
+      assert.equal(getSseConnectionCount(), 1);
+
+      assert.doesNotThrow(() => mock.timers.tick(25_000));
       assert.equal(getSseConnectionCount(), 0);
     } finally {
       mock.timers.reset();

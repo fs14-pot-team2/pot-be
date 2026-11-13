@@ -12,8 +12,8 @@ import {
 
 interface FakeResponseOptions {
   failOnWrite?: boolean;
-  ended?: boolean; // response.end() 이후 상태
-  destroyed?: boolean; // 연결이 끊어진 상태
+  ended?: boolean;
+  destroyed?: boolean;
 }
 
 // write 호출 내용만 기록하는 가짜 응답
@@ -108,6 +108,32 @@ describe("SSE 연결 관리", () => {
       publishToUser(1n, "notification.created", { notificationId: "10" });
     });
     assert.equal(healthy.frames.length, 1);
+    assert.equal(getSseConnectionCount(), 1); // 깨진 연결은 제거됨
+  });
+
+  // 전송에 실패한 연결만 남아 있던 사용자의 키도 정리되는지 확인
+  it("전송이 실패한 연결만 있으면 사용자 항목까지 정리한다", () => {
+    const broken = createFakeResponse({ failOnWrite: true });
+    connect(1n, broken.response);
+
+    assert.doesNotThrow(() => {
+      publishToUser(1n, "notification.created", { notificationId: "10" });
+    });
+    assert.equal(getSseConnectionCount(), 0);
+  });
+
+  // JSON 직렬화가 실패해도 호출한 API에 예외가 번지지 않는지 확인 (BigInt는 직렬화 불가)
+  it("직렬화에 실패해도 예외를 던지지 않고 아무것도 전송하지 않는다", () => {
+    const tab = createFakeResponse();
+    connect(1n, tab.response);
+
+    assert.doesNotThrow(() => {
+      publishToUser(1n, "notification.created", {
+        notificationId: 10n as unknown as string,
+      });
+    });
+    assert.deepEqual(tab.frames, []);
+    assert.equal(getSseConnectionCount(), 1);
   });
 
   // 만료로 end()된 연결, 끊어진 연결에 쓰면 처리되지 않는 오류가 날 수 있어 쓰지 않아야 한다
