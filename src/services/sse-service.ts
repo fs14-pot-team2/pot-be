@@ -31,7 +31,7 @@ export function removeSseClient(userId: bigint, response: Response): void {
 }
 
 // 알림·쪽지 서비스에서 DB 저장이 끝난 뒤 호출한다.
-// 연결이 없거나 전송에 실패해도 호출한 API의 응답에는 영향을 주지 않는다.
+// 연결이 없거나 직렬화·전송에 실패해도 예외를 던지지 않아 호출한 API의 응답에 영향을 주지 않는다.
 export function publishToUser<E extends SseEventName>(
   userId: bigint,
   event: E,
@@ -41,7 +41,13 @@ export function publishToUser<E extends SseEventName>(
   const connections = clients.get(key);
   if (!connections) return;
 
-  const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  let frame: string;
+  try {
+    frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  } catch (error) {
+    console.error("SSE 이벤트 직렬화에 실패했습니다.", error);
+    return;
+  }
 
   for (const response of connections) {
     if (response.writableEnded || response.destroyed) {
@@ -51,11 +57,13 @@ export function publishToUser<E extends SseEventName>(
     try {
       response.write(frame);
     } catch (error) {
+      // 깨진 연결은 목록에서 제거한다.
+      connections.delete(response);
       console.error("SSE 이벤트 전송에 실패했습니다.", error);
     }
   }
 
-  // 닫힌 연결을 정리한 뒤 비어 있으면 사용자 키도 제거
+  // 닫힌·깨진 연결을 정리한 뒤 비어 있으면 사용자 키도 제거
   if (connections.size === 0) {
     clients.delete(key);
   }

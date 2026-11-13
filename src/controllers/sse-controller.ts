@@ -41,7 +41,7 @@ export function connectEventsController(request: Request, response: Response, ne
 
   let cleaned = false;
 
-  // 여러 경로(close, error, 만료)에서 불려도 한 번만 실행
+  // 여러 경로(close, error, 만료, heartbeat 실패)에서 불려도 한 번만 실행
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
@@ -52,7 +52,13 @@ export function connectEventsController(request: Request, response: Response, ne
 
   const heartbeat = setInterval(() => {
     if (response.writableEnded || response.destroyed) return cleanup();
-    response.write(": ping\n\n");
+    try {
+      response.write(": ping\n\n");
+    } catch (error) {
+      // 인터벌 콜백에서 예외가 나면 프로세스까지 올라가므로 여기서 막는다.
+      console.error("SSE heartbeat 전송에 실패했습니다.", error);
+      cleanup();
+    }
   }, HEARTBEAT_INTERVAL_MS);
 
   // 액세스 토큰이 만료되면 연결을 닫아, 프론트가 토큰을 갱신한 뒤 다시 연결하게 한다.
