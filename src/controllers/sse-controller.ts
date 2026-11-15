@@ -71,7 +71,6 @@ export function connectEventsController(request: Request, response: Response, ne
           response.end();
         }, msUntilExpiry);
 
-  request.on("close", cleanup);
   response.on("close", cleanup);
   response.on("error", cleanup);
 }
