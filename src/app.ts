@@ -13,6 +13,7 @@ import { reviewRouter } from "./routes/review-routes.js";
 import { errorMiddleware } from "./middlewares/error-middleware.js";
 import { messageRouter } from "./routes/message-routes.js";
 import { notificationRouter } from "./routes/notification-routes.js";
+import { sseRouter } from "./routes/sse-routes.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -34,5 +35,6 @@ app.use(reviewRouter);
 app.use("/profile-images", imageRouter);
 app.use(messageRouter);
 app.use("/notifications", notificationRouter);
+app.use("/events", sseRouter);
 
 app.use(errorMiddleware);
