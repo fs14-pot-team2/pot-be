@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { rejectDesignatedRequest } from "../src/services/designated-request-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
 // 테스트에 사용할 KST 기준 날짜
@@ -125,6 +127,24 @@ function assertP2025(error: unknown) {
 }
 
 const rejectionReason = "해당 일정에는 방문이 어려워 반려합니다.";
+
+// 테스트 사용자의 SSE 연결을 등록하고 전송된 이벤트 수집
+function createSseEventCollector(userId: bigint) {
+  const events: string[] = [];
+
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(frame: string) {
+      events.push(frame);
+      return true;
+    },
+  } as unknown as Response;
+
+  addSseClient(userId, response);
+
+  return { events, response };
+}
 
 describe("지정 요청 반려", () => {
   describe("반려 조건", () => {
@@ -263,9 +283,12 @@ describe("지정 요청 반려", () => {
   });
 
   describe("동시성 및 트랜잭션", () => {
-    // 동일 지정 요청을 동시에 반려해도 반려 이력이 한 건만 생성되는지 확인
-    it("동일 지정 요청의 동시 반려 시 중복 생성을 방지한다", async () => {
+    // 동일 지정 요청을 동시에 반려해도 반려 이력과 SSE 이벤트가 중복 생성되지 않는지 확인
+    it("동일 지정 요청의 동시 반려 시 중복 생성을 방지한다", async (t) => {
       const { ownerId, sitterId, careRequestId, designatedRequestId } = await createTestRequest();
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
 
       const results = await Promise.allSettled([
         rejectDesignatedRequest(sitterId, designatedRequestId, rejectionReason),
@@ -292,7 +315,12 @@ describe("지정 요청 반려", () => {
       });
 
       assert.equal(notifications.length, 1);
+      assert.equal(notifications.length, succeeded.length);
       assert.equal(notifications[0].recipientId, ownerId);
+
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+      ]);
     });
 
     // 반려 이력 생성 이후 트랜잭션 실패 시 저장 결과가 롤백되는지 확인
