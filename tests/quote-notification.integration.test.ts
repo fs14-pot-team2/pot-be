@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import {
@@ -8,6 +9,7 @@ import {
   createQuote,
   updateQuoteService,
 } from "../src/services/quote-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import type { TransactionRunner } from "../src/types/db.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
@@ -115,9 +117,34 @@ function createNotificationFailureRunner(notificationError: Error): TransactionR
     });
 }
 
+// 테스트 사용자의 SSE 연결을 등록하고 전송된 이벤트 수집
+function createSseEventCollector(userId: bigint, failWrite = false) {
+  const events: string[] = [];
+
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(frame: string) {
+      if (failWrite) {
+        throw new Error("SSE write failed");
+      }
+
+      events.push(frame);
+      return true;
+    },
+  } as unknown as Response;
+
+  addSseClient(userId, response);
+
+  return {
+    events,
+    response,
+  };
+}
+
 describe("견적 도메인 알림 생성", () => {
   describe("생성 조건", () => {
-    // 전달된 견적 필드가 실제 변경되면 수정 알림을 생성하는지 확인
+    // 전달된 견적 필드가 실제 변경되면 수정 알림과 SSE 이벤트를 생성하는지 확인
     for (const { name, quoteData } of [
       {
         name: "금액만",
@@ -135,9 +162,12 @@ describe("견적 도메인 알림 생성", () => {
         },
       },
     ]) {
-      it(`견적 ${name} 변경되면 QUOTE_UPDATED 알림을 생성한다`, async () => {
+      it(`견적 ${name} 변경되면 QUOTE_UPDATED 알림을 생성한다`, async (t) => {
         const { ownerId, sitterId, careRequestId } = await createTestRequest();
         const quote = await createTestQuote(careRequestId, sitterId);
+        const { events, response } = createSseEventCollector(ownerId);
+
+        t.after(() => removeSseClient(ownerId, response));
 
         await updateQuoteService(sitterId, quote.id, quoteData);
 
@@ -153,13 +183,20 @@ describe("견적 도메인 알림 생성", () => {
         assert.equal(notifications[0].careRequestId, careRequestId);
         assert.equal(notifications[0].quoteId, quote.id);
         assert.equal(notifications[0].readAt, null);
+
+        assert.deepEqual(events, [
+          `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+        ]);
       });
     }
 
-    // 수정 전후 금액·코멘트가 동일하면 알림을 생성하지 않는지 확인
-    it("변경 없는 PATCH는 알림을 생성하지 않는다", async () => {
-      const { sitterId, careRequestId } = await createTestRequest();
+    // 수정 전후 금액·코멘트가 동일하면 알림과 SSE 이벤트를 생성하지 않는지 확인
+    it("변경 없는 PATCH는 알림을 생성하지 않는다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
       const quote = await createTestQuote(careRequestId, sitterId);
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
 
       await updateQuoteService(sitterId, quote.id, {
         price: quote.price,
@@ -176,14 +213,85 @@ describe("견적 도메인 알림 생성", () => {
         }),
         0,
       );
+
+      assert.equal(events.length, 0);
+    });
+  });
+
+  describe("SSE 이벤트 발행", () => {
+    // 트랜잭션이 완료되기 전에는 이벤트를 발행하지 않는지 확인
+    it("견적 생성과 알림 저장 트랜잭션 완료 이후 SSE 이벤트를 발행한다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
+
+      const runTransaction: TransactionRunner = async (callback) => {
+        const transactionResult = await prisma.$transaction(callback);
+
+        assert.equal(events.length, 0);
+
+        return transactionResult;
+      };
+
+      const createdQuote = await createQuote(
+        sitterId,
+        careRequestId,
+        10000,
+        "테스트용 견적 내용입니다.",
+        runTransaction,
+      );
+
+      const notification = await prisma.notification.findFirstOrThrow({
+        where: {
+          quoteId: createdQuote.id,
+          type: "QUOTE_RECEIVED",
+        },
+      });
+
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${notification.id}"}\n\n`,
+      ]);
+    });
+
+    // SSE 전송 실패가 커밋된 견적과 알림의 정상 처리 결과에 영향을 주지 않는지 확인
+    it("SSE 이벤트 전송 실패 시에도 견적 생성 결과를 유지한다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+      const { response } = createSseEventCollector(ownerId, true);
+
+      t.after(() => removeSseClient(ownerId, response));
+
+      const createdQuote = await createQuote(
+        sitterId,
+        careRequestId,
+        10000,
+        "테스트용 견적 내용입니다.",
+      );
+
+      const savedQuote = await prisma.quote.findUniqueOrThrow({
+        where: { id: createdQuote.id },
+      });
+
+      const notification = await prisma.notification.findFirstOrThrow({
+        where: {
+          quoteId: createdQuote.id,
+          type: "QUOTE_RECEIVED",
+        },
+      });
+
+      assert.equal(savedQuote.id, createdQuote.id);
+      assert.equal(notification.recipientId, ownerId);
     });
   });
 
   describe("동시성 및 트랜잭션", () => {
-    // 알림 저장 실패 시 같은 트랜잭션에서 생성한 견적을 롤백하는지 확인
-    it("알림 저장 실패 시 견적 생성을 롤백한다", async () => {
-      const { sitterId, careRequestId } = await createTestRequest();
+    // 알림 저장 실패 시 견적을 롤백하고 SSE 이벤트를 발행하지 않는지 확인
+    it("알림 저장 실패 시 견적 생성을 롤백한다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
       const notificationError = new Error("Notification insert failed");
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
 
       await assert.rejects(
         createQuote(
@@ -198,13 +306,17 @@ describe("견적 도메인 알림 생성", () => {
 
       assert.equal(await prisma.quote.count({ where: { careRequestId } }), 0);
       assert.equal(await prisma.notification.count({ where: { careRequestId } }), 0);
+      assert.equal(events.length, 0);
     });
 
-    // 알림 저장 실패 시 견적 금액·내용 변경을 롤백하는지 확인
-    it("알림 저장 실패 시 견적 수정을 롤백한다", async () => {
-      const { sitterId, careRequestId } = await createTestRequest();
+    // 알림 저장 실패 시 견적 수정을 롤백하고 SSE 이벤트를 발행하지 않는지 확인
+    it("알림 저장 실패 시 견적 수정을 롤백한다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
       const quote = await createTestQuote(careRequestId, sitterId);
       const notificationError = new Error("Notification insert failed");
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
 
       await assert.rejects(
         updateQuoteService(
@@ -227,13 +339,17 @@ describe("견적 도메인 알림 생성", () => {
       assert.equal(savedQuote.comment, quote.comment);
       assert.equal(savedQuote.updatedAt.getTime(), quote.updatedAt.getTime());
       assert.equal(await prisma.notification.count({ where: { careRequestId } }), 0);
+      assert.equal(events.length, 0);
     });
 
-    // 알림 저장 실패 시 돌봄 요청의 견적 확정 상태를 롤백하는지 확인
-    it("알림 저장 실패 시 견적 확정을 롤백한다", async () => {
+    // 알림 저장 실패 시 견적 확정을 롤백하고 SSE 이벤트를 발행하지 않는지 확인
+    it("알림 저장 실패 시 견적 확정을 롤백한다", async (t) => {
       const { ownerId, sitterId, careRequestId } = await createTestRequest();
       const quote = await createTestQuote(careRequestId, sitterId);
       const notificationError = new Error("Notification insert failed");
+      const { events, response } = createSseEventCollector(sitterId);
+
+      t.after(() => removeSseClient(sitterId, response));
 
       await assert.rejects(
         confirmQuoteService(ownerId, quote.id, createNotificationFailureRunner(notificationError)),
@@ -247,6 +363,7 @@ describe("견적 도메인 알림 생성", () => {
       assert.equal(savedRequest.status, "OPEN");
       assert.equal(savedRequest.confirmedQuoteId, null);
       assert.equal(await prisma.notification.count({ where: { careRequestId } }), 0);
+      assert.equal(events.length, 0);
     });
   });
 });
