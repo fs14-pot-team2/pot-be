@@ -129,6 +129,36 @@ describe("GET /events (HTTP)", () => {
     }
   });
 
+  // 기준 5: 요청 수신 완료 후 SSE 연결 유지 및 이벤트 전달
+  it("HTTP 요청 수신 완료 후에도 SSE 연결을 유지하고 이벤트를 수신한다", async () => {
+    const controller = new AbortController();
+
+    try {
+      const userId = 501n;
+      const token = signAccessToken({ sub: userId.toString(), role: "OWNER" });
+
+      const response = await connect(token, controller.signal);
+      assert.equal(response.status, 200);
+
+      const reader = response.body!.getReader();
+      await readUntil(reader, ": connected");
+
+      assert.equal(getSseConnectionCount(), 1);
+
+      publishToUser(userId, "notification.created", {
+        notificationId: "123",
+      });
+
+      const received = await readUntil(reader, "event: notification.created");
+
+      assert.ok(received.includes('data: {"notificationId":"123"}'));
+      assert.equal(getSseConnectionCount(), 1);
+    } finally {
+      controller.abort();
+      await waitFor(() => getSseConnectionCount() === 0);
+    }
+  });
+
   // 기준 5: 연결 종료 시 정리
   it("클라이언트가 연결을 끊으면 등록된 연결이 정리된다", async () => {
     const controller = new AbortController();
@@ -215,18 +245,23 @@ describe("GET /events (HTTP)", () => {
 // 기준 4: heartbeat와 만료 종료를 가짜 타이머로 검증 (HTTP 없이 컨트롤러 직접 호출)
 describe("connectEventsController 타이머", () => {
   function createFakeConnection(token: string, options: { failPing?: boolean } = {}) {
-    const listeners = new Map<string, Array<() => void>>();
+    const requestListeners = new Map<string, Array<() => void>>();
+    const responseListeners = new Map<string, Array<() => void>>();
     const written: string[] = [];
     let ended = false;
 
-    const on = (event: string, handler: () => void) => {
-      listeners.set(event, [...(listeners.get(event) ?? []), handler]);
+    const onRequest = (event: string, handler: () => void) => {
+      requestListeners.set(event, [...(requestListeners.get(event) ?? []), handler]);
+    };
+
+    const onResponse = (event: string, handler: () => void) => {
+      responseListeners.set(event, [...(responseListeners.get(event) ?? []), handler]);
     };
 
     const request = {
       headers: { authorization: `Bearer ${token}` },
       user: { id: 401n, role: "OWNER" },
-      on,
+      on: onRequest,
     } as unknown as Request;
 
     const response = {
@@ -246,7 +281,7 @@ describe("connectEventsController 타이머", () => {
       end() {
         ended = true;
       },
-      on,
+      on: onResponse,
     } as unknown as Response;
 
     return {
@@ -254,9 +289,44 @@ describe("connectEventsController 타이머", () => {
       response,
       written,
       isEnded: () => ended,
-      emit: (event: string) => listeners.get(event)?.forEach((fn) => fn()),
+      emitRequest: (event: string) => requestListeners.get(event)?.forEach((fn) => fn()),
+      emitResponse: (event: string) => responseListeners.get(event)?.forEach((fn) => fn()),
     };
   }
+
+  // 기준 5: 요청 수신 완료와 SSE 응답 연결 종료를 구분
+  it("HTTP 요청의 close 이벤트만으로 SSE 연결을 제거하지 않는다", () => {
+    const token = jwt.sign({ sub: "401", role: "OWNER" }, env.jwtAccessSecret, {
+      expiresIn: 600,
+    });
+    const connection = createFakeConnection(token);
+
+    try {
+      connectEventsController(connection.request, connection.response, () => {});
+
+      assert.equal(getSseConnectionCount(), 1);
+
+      // HTTP 요청 수신 완료를 모의한다. SSE 응답은 아직 열려 있다.
+      connection.emitRequest("close");
+
+      assert.equal(connection.isEnded(), false);
+      assert.equal(getSseConnectionCount(), 1);
+
+      publishToUser(401n, "notification.created", {
+        notificationId: "123",
+      });
+
+      assert.ok(
+        connection.written.includes(
+          'event: notification.created\ndata: {"notificationId":"123"}\n\n',
+        ),
+      );
+    } finally {
+      connection.emitResponse("close");
+    }
+
+    assert.equal(getSseConnectionCount(), 0);
+  });
 
   it("25초마다 heartbeat를 보내고, 연결이 끊기면 멈춘다", () => {
     mock.timers.enable({ apis: ["setInterval", "setTimeout", "Date"], now: Date.now() });
@@ -276,7 +346,7 @@ describe("connectEventsController 타이머", () => {
       mock.timers.tick(25_000);
       assert.equal(connection.written.length, initialWrites + 2);
 
-      connection.emit("close");
+      connection.emitResponse("close");
       mock.timers.tick(50_000);
       assert.equal(connection.written.length, initialWrites + 2);
       assert.equal(getSseConnectionCount(), 0);
