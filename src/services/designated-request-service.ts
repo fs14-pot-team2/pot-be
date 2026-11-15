@@ -20,9 +20,10 @@ import { insertNotification } from "../repositories/notification-repository.js";
 import { findSitterProfileIdByUserId } from "../repositories/profile-repository.js";
 import { findQuoteByCareRequestAndSitter } from "../repositories/quote-repository.js";
 import { findSitterByIdAndRole, findUserById } from "../repositories/user-repository.js";
-import { createNotificationMessage } from "../utils/notification-message.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
+import { publishToUser } from "./sse-service.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { createNotificationMessage } from "../utils/notification-message.js";
 
 // 팟오너의 지정 요청 생성
 export async function createDesignatedRequest(
@@ -42,7 +43,7 @@ export async function createDesignatedRequest(
   }
 
   try {
-    const createdDesignatedRequest = await runTransaction(async (tx) => {
+    const createdDesignatedRequestWithNotification = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
       const targetRequest = await findCareRequest(careRequestId, tx);
@@ -93,7 +94,7 @@ export async function createDesignatedRequest(
         throw new AppError("INTERNAL_SERVER_ERROR");
       }
 
-      await insertNotification(
+      const notification = await insertNotification(
         {
           recipientId: sitterId,
           careRequestId,
@@ -107,14 +108,28 @@ export async function createDesignatedRequest(
         tx,
       );
 
-      return createdDesignatedRequest;
+      return {
+        designatedRequest: createdDesignatedRequest,
+        notification: {
+          id: notification.id,
+          recipientId: notification.recipientId,
+        },
+      };
     });
 
-    if (!createdDesignatedRequest) {
+    if (!createdDesignatedRequestWithNotification) {
       throw new AppError("ACTIVE_CARE_REQUEST_NOT_FOUND");
     }
 
-    return createdDesignatedRequest;
+    publishToUser(
+      createdDesignatedRequestWithNotification.notification.recipientId,
+      "notification.created",
+      {
+        notificationId: createdDesignatedRequestWithNotification.notification.id.toString(),
+      },
+    );
+
+    return createdDesignatedRequestWithNotification.designatedRequest;
   } catch (error) {
     if (error instanceof Error && "code" in error) {
       // 동일 트랜잭션에 다른 생성 작업이 추가 시 지정 요청의 복합 UNIQUE 제약 충돌만 중복 지정 요청 에러로 변환
@@ -165,7 +180,7 @@ export async function rejectDesignatedRequest(
   const careRequestId = initialDesignatedRequest.careRequestId;
 
   try {
-    const createdRejectedRequest = await runTransaction(async (tx) => {
+    const createdRejectedRequestWithNotification = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
       const targetRequest = await findCareRequest(careRequestId, tx);
@@ -213,7 +228,7 @@ export async function rejectDesignatedRequest(
         throw new AppError("INTERNAL_SERVER_ERROR");
       }
 
-      await insertNotification(
+      const notification = await insertNotification(
         {
           recipientId: targetRequest.ownerId,
           careRequestId,
@@ -227,14 +242,28 @@ export async function rejectDesignatedRequest(
         tx,
       );
 
-      return createdRejectedRequest;
+      return {
+        rejectedRequest: createdRejectedRequest,
+        notification: {
+          id: notification.id,
+          recipientId: notification.recipientId,
+        },
+      };
     });
 
-    if (!createdRejectedRequest) {
+    if (!createdRejectedRequestWithNotification) {
       throw new AppError("CARE_REQUEST_NOT_FOUND");
     }
 
-    return createdRejectedRequest;
+    publishToUser(
+      createdRejectedRequestWithNotification.notification.recipientId,
+      "notification.created",
+      {
+        notificationId: createdRejectedRequestWithNotification.notification.id.toString(),
+      },
+    );
+
+    return createdRejectedRequestWithNotification.rejectedRequest;
   } catch (error) {
     if (
       error instanceof Error &&
