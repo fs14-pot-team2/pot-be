@@ -40,6 +40,7 @@ import {
 } from "../validators/care-request-validator.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
+import { publishToUser } from "./sse-service.js";
 
 // 팟오너의 신규 돌봄 요청 생성
 export async function createCareRequest(
@@ -241,7 +242,7 @@ export async function cancelCareRequestService(
   }
 
   try {
-    const canceledRequest = await runTransaction(async (tx) => {
+    const canceledRequestWithNotifications = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
       const targetRequest = await findCareRequest(careRequestId, tx);
@@ -270,7 +271,10 @@ export async function cancelCareRequestService(
       const canceledRequest = await cancelCareRequest(careRequestId, ownerId, tx);
 
       if (sitterIds.length === 0) {
-        return canceledRequest;
+        return {
+          canceledRequest,
+          notifications: [],
+        };
       }
 
       const owner = await findUserById(ownerId, tx);
@@ -289,16 +293,26 @@ export async function cancelCareRequestService(
         }),
       }));
 
-      await insertNotifications(careRequestCanceledNotifications, tx);
+      const notifications = await insertNotifications(careRequestCanceledNotifications, tx);
 
-      return canceledRequest;
+      return {
+        canceledRequest,
+        notifications,
+      };
     });
 
-    if (!canceledRequest) {
+    if (!canceledRequestWithNotifications) {
       throw new AppError("CARE_REQUEST_NOT_FOUND");
     }
 
-    return canceledRequest;
+    // 트랜잭션 커밋 이후 생성된 알림별 SSE 이벤트 발행
+    for (const notification of canceledRequestWithNotifications.notifications) {
+      publishToUser(notification.recipientId, "notification.created", {
+        notificationId: notification.id.toString(),
+      });
+    }
+
+    return canceledRequestWithNotifications.canceledRequest;
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "P2025")) {
       throw error;

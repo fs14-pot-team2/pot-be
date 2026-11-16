@@ -125,12 +125,16 @@ export function insertNotification(
   });
 }
 
-// 알림 일괄 생성
+// 알림 일괄 생성 및 생성된 알림의 식별 정보 반환
 export function insertNotifications(
   notificationData: Prisma.NotificationCreateManyInput[],
   db: DbClient = prisma,
 ) {
-  return db.notification.createMany({
+  return db.notification.createManyAndReturn({
     data: notificationData,
+    select: {
+      id: true,
+      recipientId: true,
+    },
   });
 }
