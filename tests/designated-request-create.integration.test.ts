@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { createDesignatedRequest } from "../src/services/designated-request-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
 // 테스트에 사용할 KST 기준 날짜
@@ -105,6 +107,24 @@ function assertP2025(error: unknown) {
   return error instanceof Error && "code" in error && error.code === "P2025";
 }
 
+// 테스트 사용자의 SSE 연결을 등록하고 전송된 이벤트 수집
+function createSseEventCollector(userId: bigint) {
+  const events: string[] = [];
+
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(frame: string) {
+      events.push(frame);
+      return true;
+    },
+  } as unknown as Response;
+
+  addSseClient(userId, response);
+
+  return { events, response };
+}
+
 describe("지정 요청 생성", () => {
   describe("생성 조건", () => {
     // 정상 생성 후 동일 팟트너에게 중복 지정할 수 없는지 확인
@@ -196,9 +216,20 @@ describe("지정 요청 생성", () => {
   });
 
   describe("동시성 및 트랜잭션", () => {
-    // 서로 다른 팟트너의 동시 요청에도 누적 3건 제한을 유지하는지 확인
-    it("동시 지정 요청 시 최대 3건 제한을 유지한다", async () => {
+    // 서로 다른 팟트너의 동시 요청에도 누적 3건 제한과 SSE 이벤트 정합성을 유지하는지 확인
+    it("동시 지정 요청 시 최대 3건 제한을 유지한다", async (t) => {
       const { ownerId, careRequestId, sitterIds } = await createTestRequest();
+
+      const collectors = sitterIds.map((sitterId) => ({
+        sitterId,
+        ...createSseEventCollector(sitterId),
+      }));
+
+      t.after(() => {
+        for (const collector of collectors) {
+          removeSseClient(collector.sitterId, collector.response);
+        }
+      });
 
       const results = await Promise.allSettled(
         sitterIds.map((sitterId) => createDesignatedRequest(ownerId, careRequestId, sitterId)),
@@ -226,6 +257,7 @@ describe("지정 요청 생성", () => {
       });
 
       assert.equal(notifications.length, 3);
+      assert.equal(notifications.length, succeeded.length);
 
       for (const savedRequest of savedRequests) {
         const matchingNotifications = notifications.filter(
@@ -236,12 +268,33 @@ describe("지정 요청 생성", () => {
 
         assert.equal(matchingNotifications.length, 1);
       }
+
+      const totalEvents = collectors.reduce(
+        (count, collector) => count + collector.events.length,
+        0,
+      );
+
+      assert.equal(totalEvents, notifications.length);
+
+      for (const collector of collectors) {
+        const expectedEvents = notifications
+          .filter((notification) => notification.recipientId === collector.sitterId)
+          .map(
+            (notification) =>
+              `event: notification.created\ndata: {"notificationId":"${notification.id}"}\n\n`,
+          );
+
+        assert.deepEqual(collector.events, expectedEvents);
+      }
     });
 
-    // 동일 팟트너의 동시 요청은 한 건만 저장하는지 확인
-    it("동일 팟트너 동시 지정 시 중복 생성을 방지한다", async () => {
+    // 동일 팟트너의 동시 요청은 한 건만 저장하고 SSE 이벤트도 중복 발행하지 않는지 확인
+    it("동일 팟트너 동시 지정 시 중복 생성을 방지한다", async (t) => {
       const { ownerId, careRequestId, sitterIds } = await createTestRequest();
       const sitterId = sitterIds[0];
+      const { events, response } = createSseEventCollector(sitterId);
+
+      t.after(() => removeSseClient(sitterId, response));
 
       const results = await Promise.allSettled([
         createDesignatedRequest(ownerId, careRequestId, sitterId),
@@ -272,8 +325,13 @@ describe("지정 요청 생성", () => {
       });
 
       assert.equal(notifications.length, 1);
+      assert.equal(notifications.length, succeeded.length);
       assert.equal(notifications[0].recipientId, sitterId);
       assert.equal(notifications[0].designatedRequestId, savedRequest.id);
+
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+      ]);
     });
 
     // 트랜잭션 중간 실패 시 생성된 지정 요청이 롤백되는지 확인

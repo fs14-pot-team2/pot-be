@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import {
   createDesignatedRequest,
   rejectDesignatedRequest,
 } from "../src/services/designated-request-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import type { TransactionRunner } from "../src/types/db.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
@@ -98,12 +100,159 @@ function createNotificationFailureRunner(notificationError: Error): TransactionR
     });
 }
 
+// 테스트 사용자의 SSE 연결을 등록하고 전송된 이벤트 수집
+function createSseEventCollector(userId: bigint, failWrite = false) {
+  const events: string[] = [];
+
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(frame: string) {
+      if (failWrite) {
+        throw new Error("SSE write failed");
+      }
+
+      events.push(frame);
+      return true;
+    },
+  } as unknown as Response;
+
+  addSseClient(userId, response);
+
+  return {
+    events,
+    response,
+  };
+}
+
 describe("지정 요청 도메인 알림 생성", () => {
+  describe("SSE 이벤트 발행", () => {
+    // 트랜잭션이 완료되기 전에는 이벤트를 발행하지 않는지 확인
+    it("지정 요청 생성·반려와 알림 저장 트랜잭션 완료 이후 SSE 이벤트를 발행한다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+
+      const ownerCollector = createSseEventCollector(ownerId);
+      const sitterCollector = createSseEventCollector(sitterId);
+
+      t.after(() => {
+        removeSseClient(ownerId, ownerCollector.response);
+        removeSseClient(sitterId, sitterCollector.response);
+      });
+
+      const runTransaction: TransactionRunner = async (callback) => {
+        const transactionResult = await prisma.$transaction(callback);
+
+        assert.equal(ownerCollector.events.length, 0);
+        assert.equal(sitterCollector.events.length, 0);
+
+        return transactionResult;
+      };
+
+      const createdDesignatedRequest = await createDesignatedRequest(
+        ownerId,
+        careRequestId,
+        sitterId,
+        runTransaction,
+      );
+
+      const receivedNotification = await prisma.notification.findFirstOrThrow({
+        where: {
+          designatedRequestId: createdDesignatedRequest.id,
+          type: "DESIGNATED_REQUEST_RECEIVED",
+        },
+      });
+
+      assert.deepEqual(sitterCollector.events, [
+        `event: notification.created\ndata: {"notificationId":"${receivedNotification.id}"}\n\n`,
+      ]);
+      assert.equal(ownerCollector.events.length, 0);
+
+      sitterCollector.events.length = 0;
+
+      const createdRejectedRequest = await rejectDesignatedRequest(
+        sitterId,
+        createdDesignatedRequest.id,
+        "해당 일정에는 방문이 어려워 반려합니다.",
+        runTransaction,
+      );
+
+      const rejectedNotification = await prisma.notification.findFirstOrThrow({
+        where: {
+          designatedRequestId: createdDesignatedRequest.id,
+          type: "DESIGNATED_REQUEST_REJECTED",
+        },
+      });
+
+      assert.equal(createdRejectedRequest.designatedRequestId, createdDesignatedRequest.id);
+
+      assert.deepEqual(ownerCollector.events, [
+        `event: notification.created\ndata: {"notificationId":"${rejectedNotification.id}"}\n\n`,
+      ]);
+      assert.equal(sitterCollector.events.length, 0);
+    });
+
+    // SSE 전송 실패가 커밋된 지정 요청·반려 이력과 알림의 정상 처리 결과에 영향을 주지 않는지 확인
+    it("SSE 이벤트 전송 실패 시에도 지정 요청 생성·반려 결과를 유지한다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+
+      const ownerCollector = createSseEventCollector(ownerId, true);
+      const sitterCollector = createSseEventCollector(sitterId, true);
+
+      t.after(() => {
+        removeSseClient(ownerId, ownerCollector.response);
+        removeSseClient(sitterId, sitterCollector.response);
+      });
+
+      const createdDesignatedRequest = await createDesignatedRequest(
+        ownerId,
+        careRequestId,
+        sitterId,
+      );
+
+      const savedDesignatedRequest = await prisma.designatedRequest.findUniqueOrThrow({
+        where: { id: createdDesignatedRequest.id },
+      });
+
+      const receivedNotification = await prisma.notification.findFirstOrThrow({
+        where: {
+          designatedRequestId: createdDesignatedRequest.id,
+          type: "DESIGNATED_REQUEST_RECEIVED",
+        },
+      });
+
+      assert.equal(savedDesignatedRequest.id, createdDesignatedRequest.id);
+      assert.equal(receivedNotification.recipientId, sitterId);
+
+      const createdRejectedRequest = await rejectDesignatedRequest(
+        sitterId,
+        createdDesignatedRequest.id,
+        "해당 일정에는 방문이 어려워 반려합니다.",
+      );
+
+      const savedRejectedRequest = await prisma.rejectedRequest.findUniqueOrThrow({
+        where: { id: createdRejectedRequest.id },
+      });
+
+      const rejectedNotification = await prisma.notification.findFirstOrThrow({
+        where: {
+          designatedRequestId: createdDesignatedRequest.id,
+          type: "DESIGNATED_REQUEST_REJECTED",
+        },
+      });
+
+      assert.equal(savedRejectedRequest.id, createdRejectedRequest.id);
+      assert.equal(rejectedNotification.recipientId, ownerId);
+    });
+  });
+
   describe("동시성 및 트랜잭션", () => {
-    // 알림 저장 실패 시 같은 트랜잭션에서 생성한 지정 요청을 롤백하는지 확인
-    it("알림 저장 실패 시 지정 요청 생성을 롤백한다", async () => {
+    // 알림 저장 실패 시 지정 요청을 롤백하고 SSE 이벤트를 발행하지 않는지 확인
+    it("알림 저장 실패 시 지정 요청 생성을 롤백한다", async (t) => {
       const { ownerId, sitterId, careRequestId } = await createTestRequest();
       const notificationError = new Error("Notification insert failed");
+      const { events, response } = createSseEventCollector(sitterId);
+
+      t.after(() => removeSseClient(sitterId, response));
 
       await assert.rejects(
         createDesignatedRequest(
@@ -122,11 +271,15 @@ describe("지정 요청 도메인 알림 생성", () => {
         0,
       );
       assert.equal(await prisma.notification.count({ where: { careRequestId } }), 0);
+      assert.equal(events.length, 0);
     });
 
-    // 알림 저장 실패 시 반려 이력 생성이 롤백되고 기존 지정 요청은 유지되는지 확인
-    it("알림 저장 실패 시 지정 요청 반려를 롤백한다", async () => {
-      const { sitterId, careRequestId } = await createTestRequest();
+    // 알림 저장 실패 시 반려 이력 생성을 롤백하고 SSE 이벤트를 발행하지 않는지 확인
+    it("알림 저장 실패 시 지정 요청 반려를 롤백한다", async (t) => {
+      const { ownerId, sitterId, careRequestId } = await createTestRequest();
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
 
       const designatedRequest = await prisma.designatedRequest.create({
         data: {
@@ -160,6 +313,7 @@ describe("지정 요청 도메인 알림 생성", () => {
         1,
       );
       assert.equal(await prisma.notification.count({ where: { careRequestId } }), 0);
+      assert.equal(events.length, 0);
     });
   });
 });
