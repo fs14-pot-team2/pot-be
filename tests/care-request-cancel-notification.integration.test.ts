@@ -17,7 +17,7 @@ function futureDate(days: number) {
 }
 
 // 각 테스트에서 사용할 독립적인 팟오너, 돌봄 요청 및 팟트너 생성
-async function createTestRequest() {
+async function createTestRequest(withQuotes = true) {
   const uniqueId = randomUUID();
 
   const owner = await prisma.user.create({
@@ -69,15 +69,17 @@ async function createTestRequest() {
     },
   });
 
-  await prisma.quote.createMany({
-    data: sitters.map((sitter) => ({
-      careRequestId: careRequest.id,
-      sitterId: sitter.id,
-      type: "GENERAL" as const,
-      price: 10000,
-      comment: "취소 알림 트랜잭션 검증용 견적 내용입니다.",
-    })),
-  });
+  if (withQuotes) {
+    await prisma.quote.createMany({
+      data: sitters.map((sitter) => ({
+        careRequestId: careRequest.id,
+        sitterId: sitter.id,
+        type: "GENERAL" as const,
+        price: 10000,
+        comment: "취소 알림 트랜잭션 검증용 견적 내용입니다.",
+      })),
+    });
+  }
 
   return {
     ownerId: owner.id,
@@ -232,6 +234,84 @@ describe("돌봄 요청 도메인 알림 생성", () => {
       assert.equal(failedCollector.events.length, 0);
       assert.deepEqual(successfulCollector.events, [
         `event: notification.created\ndata: {"notificationId":"${successfulNotification.id}"}\n\n`,
+      ]);
+    });
+
+    // 견적 제출자가 없는 요청 취소 시 알림과 SSE 이벤트를 생성하지 않는지 확인
+    it("견적 제출자가 없는 요청 취소 시 알림과 SSE 이벤트를 생성하지 않는다", async (t) => {
+      const { ownerId, careRequestId, sitterIds } = await createTestRequest(false);
+
+      const collectors = sitterIds.map((sitterId) => ({
+        sitterId,
+        ...createSseEventCollector(sitterId),
+      }));
+
+      t.after(() => {
+        for (const collector of collectors) {
+          removeSseClient(collector.sitterId, collector.response);
+        }
+      });
+
+      const canceledRequest = await cancelCareRequestService(ownerId, careRequestId);
+
+      assert.equal(canceledRequest.status, "CANCELED");
+      assert.ok(canceledRequest.canceledAt instanceof Date);
+      assert.equal(await prisma.quote.count({ where: { careRequestId } }), 0);
+      assert.equal(
+        await prisma.notification.count({
+          where: { careRequestId, type: "CARE_REQUEST_CANCELED" },
+        }),
+        0,
+      );
+
+      for (const collector of collectors) {
+        assert.equal(collector.events.length, 0);
+      }
+    });
+
+    // 일부 팟트너의 SSE 연결이 없어도 취소 결과와 다른 팟트너의 이벤트 발행을 유지하는지 확인
+    it("일부 팟트너의 SSE 연결이 없어도 취소와 복수 알림 저장 및 이벤트 발행을 유지한다", async (t) => {
+      const { ownerId, careRequestId, sitterIds } = await createTestRequest();
+      const connectedSitterId = sitterIds[0];
+      const disconnectedSitterId = sitterIds[1];
+      const { events, response } = createSseEventCollector(connectedSitterId);
+
+      t.after(() => removeSseClient(connectedSitterId, response));
+
+      const canceledRequest = await cancelCareRequestService(ownerId, careRequestId);
+
+      assert.equal(canceledRequest.status, "CANCELED");
+
+      const savedRequest = await prisma.careRequest.findUniqueOrThrow({
+        where: { id: careRequestId },
+      });
+
+      assert.equal(savedRequest.status, "CANCELED");
+
+      const notifications = await prisma.notification.findMany({
+        where: { careRequestId, type: "CARE_REQUEST_CANCELED" },
+        select: { id: true, recipientId: true },
+      });
+
+      assert.equal(notifications.length, sitterIds.length);
+      assert.deepEqual(
+        new Set(notifications.map((notification) => notification.recipientId)),
+        new Set(sitterIds),
+      );
+
+      const connectedNotification = notifications.find(
+        (notification) => notification.recipientId === connectedSitterId,
+      );
+
+      const disconnectedNotification = notifications.find(
+        (notification) => notification.recipientId === disconnectedSitterId,
+      );
+
+      assert.ok(connectedNotification);
+      assert.ok(disconnectedNotification);
+
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${connectedNotification.id}"}\n\n`,
       ]);
     });
   });
