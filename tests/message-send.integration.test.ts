@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
+
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { sendMessage } from "../src/services/message-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
 type SendResult = Awaited<ReturnType<typeof sendMessage>>;
@@ -107,6 +110,20 @@ async function createTestRequest(options: { withQuote?: boolean; startDate?: Dat
   }
 
   return { ownerId: owner.id, sitterId: sitter.id, careRequestId: request.id };
+}
+
+// write 호출 내용만 기록하는 가짜 SSE 응답
+function createFakeSseResponse() {
+  const frames: string[] = [];
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(chunk: string) {
+      frames.push(chunk);
+      return true;
+    },
+  } as unknown as Response;
+  return { response, frames };
 }
 
 describe("쪽지 발송", () => {
@@ -368,6 +385,158 @@ describe("쪽지 발송", () => {
 
       assert.equal(await prisma.conversation.count({ where: { ownerId, sitterId } }), 0);
       assert.equal(await prisma.message.count({ where: { senderId: ownerId } }), 0);
+    });
+  });
+
+  describe("실시간 이벤트 발행", () => {
+    const connected: Array<{ userId: bigint; response: Response }> = [];
+
+    function connect(userId: bigint) {
+      const fake = createFakeSseResponse();
+      addSseClient(userId, fake.response);
+      connected.push({ userId, response: fake.response });
+      return fake;
+    }
+
+    // 테스트 간 연결 상태가 섞이지 않도록 모든 연결을 정리
+    afterEach(() => {
+      for (const { userId, response } of connected.splice(0)) {
+        removeSseClient(userId, response);
+      }
+    });
+
+    // 최초 발송 성공 시 수신자에게만 message.created가 전달되는지 확인
+    it("최초 발송 후 수신자에게만 message.created를 발행한다", async () => {
+      const { ownerId, sitterId } = await createTestRequest();
+      const receiver = connect(sitterId);
+      const sender = connect(ownerId);
+
+      const result = await sendMessage(ownerId, "OWNER", {
+        otherUserId: sitterId,
+        content: messageContent,
+      });
+
+      const payload = JSON.stringify({
+        conversationId: result.conversationId.toString(),
+        messageId: result.message.id.toString(),
+        senderId: ownerId.toString(),
+      });
+
+      assert.deepEqual(receiver.frames, [`event: message.created\ndata: ${payload}\n\n`]);
+      assert.deepEqual(sender.frames, []);
+    });
+
+    // 후속 발송(팟트너 → 팟오너)에서도 상대방에게 전달되는지 확인
+    it("후속 발송에서도 상대방에게 발행한다", async () => {
+      const { ownerId, sitterId } = await createTestRequest();
+      await sendMessage(ownerId, "OWNER", { otherUserId: sitterId, content: messageContent });
+      const ownerConnection = connect(ownerId);
+
+      const result = await sendMessage(sitterId, "SITTER", {
+        otherUserId: ownerId,
+        content: messageContent,
+      });
+
+      const payload = JSON.stringify({
+        conversationId: result.conversationId.toString(),
+        messageId: result.message.id.toString(),
+        senderId: sitterId.toString(),
+      });
+
+      assert.deepEqual(ownerConnection.frames, [`event: message.created\ndata: ${payload}\n\n`]);
+    });
+
+    // 트랜잭션이 실패하면 이벤트를 발행하지 않는지 확인
+    it("트랜잭션 실패 시 이벤트를 발행하지 않는다", async () => {
+      const { ownerId, sitterId } = await createTestRequest();
+      const receiver = connect(sitterId);
+      const transactionError = new Error("Transaction failed");
+
+      const runTransaction = <T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) =>
+        prisma.$transaction(async (tx) => {
+          await callback(tx);
+          throw transactionError;
+        });
+
+      await assert.rejects(
+        sendMessage(
+          ownerId,
+          "OWNER",
+          { otherUserId: sitterId, content: messageContent },
+          runTransaction,
+        ),
+        (error: unknown) => error === transactionError,
+      );
+
+      assert.deepEqual(receiver.frames, []);
+    });
+
+    // 발송 자체가 거부되면 이벤트를 발행하지 않는지 확인
+    it("발송이 거부되면 이벤트를 발행하지 않는다", async () => {
+      const { ownerId, sitterId } = await createTestRequest({ withQuote: false });
+      const receiver = connect(sitterId);
+
+      await assert.rejects(
+        sendMessage(ownerId, "OWNER", { otherUserId: sitterId, content: messageContent }),
+        assertAppError("MESSAGE_START_FORBIDDEN", 403),
+      );
+
+      assert.deepEqual(receiver.frames, []);
+    });
+
+    // 대화방 UNIQUE 충돌로 재시도해도 이벤트는 1회만 발행되는지 확인
+    it("UNIQUE 충돌로 재시도해도 이벤트는 1회만 발행한다", async () => {
+      const { ownerId, sitterId } = await createTestRequest();
+      const receiver = connect(sitterId);
+      let calls = 0;
+
+      const runTransaction = async <T>(callback: (tx: Prisma.TransactionClient) => Promise<T>) => {
+        calls += 1;
+
+        if (calls === 1) {
+          throw createP2002Error("Conversation_ownerId_sitterId_key");
+        }
+
+        return prisma.$transaction(callback);
+      };
+
+      const result = await sendMessage(
+        ownerId,
+        "OWNER",
+        { otherUserId: sitterId, content: messageContent },
+        runTransaction,
+      );
+
+      assert.equal(calls, 2);
+      assert.equal(receiver.frames.length, 1);
+      assert.ok(receiver.frames[0]!.includes(`"messageId":"${result.message.id}"`));
+    });
+
+    // 수신자의 연결이 깨져 있어도 발송은 성공해야 한다
+    it("이벤트 전송에 실패해도 쪽지 발송은 성공한다", async () => {
+      const { ownerId, sitterId } = await createTestRequest();
+      const broken = {
+        writableEnded: false,
+        destroyed: false,
+        write() {
+          throw new Error("write failed");
+        },
+      } as unknown as Response;
+      addSseClient(sitterId, broken);
+      connected.push({ userId: sitterId, response: broken });
+
+      // 전송 실패 로그가 테스트 출력에 섞이지 않도록 잠시 막는다
+      const originalError = console.error;
+      console.error = () => {};
+      try {
+        const result = await sendMessage(ownerId, "OWNER", {
+          otherUserId: sitterId,
+          content: messageContent,
+        });
+        assert.equal(result.message.content, messageContent);
+      } finally {
+        console.error = originalError;
+      }
     });
   });
 
