@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import { createReview } from "../src/services/review-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 import { getUniqueConstraintName } from "../src/utils/prisma-error.js";
 
@@ -179,11 +181,24 @@ describe("리뷰 생성", () => {
     assert.equal(await prisma.review.count({ where: { careRequestId } }), 1);
   });
 
-  // 동시 리뷰 생성 시 하나만 성공하고 중복 알림 없이 기존 도메인 오류를 유지하는지 확인
-  it("동시에 두 번 요청해도 하나만 성공하고 나머지는 REVIEW_ALREADY_EXISTS다", async () => {
+  // 동시 리뷰 생성 시 하나만 성공하고 중복 알림·SSE 이벤트 없이 기존 도메인 오류를 유지하는지 확인
+  it("동시에 두 번 요청해도 하나만 성공하고 나머지는 REVIEW_ALREADY_EXISTS다", async (t) => {
     const ownerId = await createUser("race-owner", "OWNER");
     const sitterId = await createUser("race-sitter", "SITTER");
     const careRequestId = await createMatchedRequest(ownerId, sitterId, -1);
+    const events: string[] = [];
+
+    const response = {
+      writableEnded: false,
+      destroyed: false,
+      write(frame: string) {
+        events.push(frame);
+        return true;
+      },
+    } as unknown as Response;
+
+    addSseClient(sitterId, response);
+    t.after(() => removeSseClient(sitterId, response));
 
     const results = await Promise.allSettled([
       createReview(ownerId, careRequestId, input),
@@ -209,6 +224,10 @@ describe("리뷰 생성", () => {
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].recipientId, sitterId);
     assert.equal(notifications[0].reviewId, reviews[0].id);
+
+    assert.deepEqual(events, [
+      `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+    ]);
   });
 
   it("UNIQUE 충돌 에러에서 제약 이름을 추출한다", async () => {
