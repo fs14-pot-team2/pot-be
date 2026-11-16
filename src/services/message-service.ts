@@ -19,6 +19,7 @@ import type { UserRole } from "../types/auth.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import type { SendMessageInput } from "../validators/message-validator.js";
+import { publishToUser } from "./sse-service.js";
 
 const CONVERSATION_PAIR_UNIQUE_INDEX = "Conversation_ownerId_sitterId_key";
 
@@ -194,6 +195,14 @@ export async function sendMessage(
     }
     result = await attempt();
   }
+
+  // 트랜잭션이 커밋된 뒤에만 수신자에게 실시간 이벤트를 보낸다 (롤백·실패 시에는 발행하지 않음).
+  // publishToUser는 예외를 던지지 않으므로 이벤트 전송 실패가 쪽지 발송 응답에 영향을 주지 않는다.
+  publishToUser(input.otherUserId, "message.created", {
+    conversationId: result.conversationId.toString(),
+    messageId: result.message.id.toString(),
+    senderId: userId.toString(),
+  });
 
   return {
     conversationId: result.conversationId,
