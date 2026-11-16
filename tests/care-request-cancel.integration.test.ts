@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import { cancelCareRequest } from "../src/repositories/care-request-repository.js";
 import { cancelCareRequestService } from "../src/services/care-request-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import {
   confirmQuoteService,
   createQuote,
@@ -180,12 +182,43 @@ async function createTestQuote(careRequestId: bigint, sitterId: bigint) {
   });
 }
 
+// 테스트 사용자의 SSE 연결을 등록하고 전송된 이벤트 수집
+function createSseEventCollector(userId: bigint) {
+  const events: string[] = [];
+
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(frame: string) {
+      events.push(frame);
+      return true;
+    },
+  } as unknown as Response;
+
+  addSseClient(userId, response);
+
+  return { events, response };
+}
+
 describe("돌봄 요청 취소", () => {
   describe("동시성 및 트랜잭션", () => {
     // 동일 요청을 동시에 취소해도 한 번만 성공하고 취소 결과를 유지하는지 확인
-    it("동일 요청의 동시 취소 시 중복 취소를 방지한다", async () => {
+    it("동일 요청의 동시 취소 시 중복 취소를 방지한다", async (t) => {
       const { ownerId, sitterId, careRequestId } = await createTestRequest();
       await createTestQuote(careRequestId, sitterId);
+
+      const events: string[] = [];
+      const response = {
+        writableEnded: false,
+        destroyed: false,
+        write(frame: string) {
+          events.push(frame);
+          return true;
+        },
+      } as unknown as Response;
+
+      addSseClient(sitterId, response);
+      t.after(() => removeSseClient(sitterId, response));
 
       const results = await Promise.allSettled([
         cancelCareRequestService(ownerId, careRequestId),
@@ -224,13 +257,20 @@ describe("돌봄 요청 취소", () => {
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0].recipientId, sitterId);
+
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+      ]);
     });
 
     // 취소와 견적 확정의 실행 순서를 각각 고정하여 하나의 상태 변경만 허용하는지 확인
     for (const firstOperation of ["CANCEL", "CONFIRM"] as const) {
-      it(`돌봄 요청 취소와 견적 확정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async () => {
+      it(`돌봄 요청 취소와 견적 확정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async (t) => {
         const { ownerId, sitterId, careRequestId } = await createTestRequest();
         const quote = await createTestQuote(careRequestId, sitterId);
+        const { events, response } = createSseEventCollector(sitterId);
+
+        t.after(() => removeSseClient(sitterId, response));
 
         const cancel = (runTransaction: TransactionRunner) =>
           cancelCareRequestService(ownerId, careRequestId, runTransaction);
@@ -272,13 +312,39 @@ describe("돌봄 요청 취소", () => {
         if (firstOperation === "CANCEL") {
           assert.equal(notifications[0].recipientId, sitterId);
         }
+
+        const confirmedNotifications = await prisma.notification.findMany({
+          where: { careRequestId, type: "QUOTE_CONFIRMED" },
+        });
+
+        assert.equal(confirmedNotifications.length, firstOperation === "CONFIRM" ? 1 : 0);
+
+        if (firstOperation === "CONFIRM") {
+          assert.equal(confirmedNotifications[0].recipientId, sitterId);
+        }
+
+        const expectedEvents =
+          firstOperation === "CANCEL"
+            ? [`event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`]
+            : [
+                `event: notification.created\ndata: {"notificationId":"${confirmedNotifications[0].id}"}\n\n`,
+              ];
+
+        assert.deepEqual(events, expectedEvents);
       });
     }
 
     // 취소와 견적 생성의 실행 순서를 각각 고정하여 견적 생성 가능 여부를 확인
     for (const firstOperation of ["CANCEL", "CREATE"] as const) {
-      it(`돌봄 요청 취소와 견적 생성이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async () => {
+      it(`돌봄 요청 취소와 견적 생성이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async (t) => {
         const { ownerId, sitterId, careRequestId } = await createTestRequest();
+        const ownerSse = createSseEventCollector(ownerId);
+        const sitterSse = createSseEventCollector(sitterId);
+
+        t.after(() => {
+          removeSseClient(ownerId, ownerSse.response);
+          removeSseClient(sitterId, sitterSse.response);
+        });
 
         const cancel = (runTransaction: TransactionRunner) =>
           cancelCareRequestService(ownerId, careRequestId, runTransaction);
@@ -334,14 +400,42 @@ describe("돌봄 요청 취소", () => {
         if (firstOperation === "CREATE") {
           assert.equal(notifications[0].recipientId, sitterId);
         }
+
+        const receivedNotifications = await prisma.notification.findMany({
+          where: { careRequestId, type: "QUOTE_RECEIVED" },
+        });
+
+        assert.equal(receivedNotifications.length, firstOperation === "CREATE" ? 1 : 0);
+
+        if (firstOperation === "CREATE") {
+          assert.equal(receivedNotifications[0].recipientId, ownerId);
+
+          assert.deepEqual(ownerSse.events, [
+            `event: notification.created\ndata: {"notificationId":"${receivedNotifications[0].id}"}\n\n`,
+          ]);
+
+          assert.deepEqual(sitterSse.events, [
+            `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+          ]);
+        } else {
+          assert.equal(ownerSse.events.length, 0);
+          assert.equal(sitterSse.events.length, 0);
+        }
       });
     }
 
     // 취소와 견적 수정의 실행 순서를 각각 고정하여 견적 수정 가능 여부를 확인
     for (const firstOperation of ["CANCEL", "UPDATE"] as const) {
-      it(`돌봄 요청 취소와 견적 수정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async () => {
+      it(`돌봄 요청 취소와 견적 수정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async (t) => {
         const { ownerId, sitterId, careRequestId } = await createTestRequest();
         const quote = await createTestQuote(careRequestId, sitterId);
+        const ownerSse = createSseEventCollector(ownerId);
+        const sitterSse = createSseEventCollector(sitterId);
+
+        t.after(() => {
+          removeSseClient(ownerId, ownerSse.response);
+          removeSseClient(sitterId, sitterSse.response);
+        });
 
         const cancel = (runTransaction: TransactionRunner) =>
           cancelCareRequestService(ownerId, careRequestId, runTransaction);
@@ -381,6 +475,29 @@ describe("돌봄 요청 취소", () => {
 
         assert.equal(notifications.length, 1);
         assert.equal(notifications[0].recipientId, sitterId);
+
+        const updatedNotifications = await prisma.notification.findMany({
+          where: { careRequestId, type: "QUOTE_UPDATED" },
+        });
+
+        assert.equal(updatedNotifications.length, firstOperation === "UPDATE" ? 1 : 0);
+
+        if (firstOperation === "UPDATE") {
+          assert.equal(updatedNotifications[0].recipientId, ownerId);
+        }
+
+        const expectedOwnerEvents =
+          firstOperation === "UPDATE"
+            ? [
+                `event: notification.created\ndata: {"notificationId":"${updatedNotifications[0].id}"}\n\n`,
+              ]
+            : [];
+
+        assert.deepEqual(ownerSse.events, expectedOwnerEvents);
+
+        assert.deepEqual(sitterSse.events, [
+          `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+        ]);
       });
     }
 
