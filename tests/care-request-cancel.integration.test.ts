@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import { cancelCareRequest } from "../src/repositories/care-request-repository.js";
 import { cancelCareRequestService } from "../src/services/care-request-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import {
   confirmQuoteService,
   createQuote,
@@ -183,9 +185,22 @@ async function createTestQuote(careRequestId: bigint, sitterId: bigint) {
 describe("돌봄 요청 취소", () => {
   describe("동시성 및 트랜잭션", () => {
     // 동일 요청을 동시에 취소해도 한 번만 성공하고 취소 결과를 유지하는지 확인
-    it("동일 요청의 동시 취소 시 중복 취소를 방지한다", async () => {
+    it("동일 요청의 동시 취소 시 중복 취소를 방지한다", async (t) => {
       const { ownerId, sitterId, careRequestId } = await createTestRequest();
       await createTestQuote(careRequestId, sitterId);
+
+      const events: string[] = [];
+      const response = {
+        writableEnded: false,
+        destroyed: false,
+        write(frame: string) {
+          events.push(frame);
+          return true;
+        },
+      } as unknown as Response;
+
+      addSseClient(sitterId, response);
+      t.after(() => removeSseClient(sitterId, response));
 
       const results = await Promise.allSettled([
         cancelCareRequestService(ownerId, careRequestId),
@@ -224,6 +239,10 @@ describe("돌봄 요청 취소", () => {
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0].recipientId, sitterId);
+
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+      ]);
     });
 
     // 취소와 견적 확정의 실행 순서를 각각 고정하여 하나의 상태 변경만 허용하는지 확인
