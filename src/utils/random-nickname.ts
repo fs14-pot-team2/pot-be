@@ -46,15 +46,3 @@ export function generateRandomNickname(): string {
   const digits = String(Math.floor(Math.random() * 10 ** digitLength)).padStart(digitLength, "0");
   return `${base}${digits}`;
 }
-
-// exists: 해당 role에서 이미 사용 중인 닉네임인지 확인 (repository 조회를 주입)
-export async function generateUniqueNickname(
-  exists: (nickname: string) => Promise<boolean>,
-  maxAttempts = 10,
-): Promise<string> {
-  for (let i = 0; i < maxAttempts; i++) {
-    const nickname = generateRandomNickname();
-    if (!(await exists(nickname))) return nickname;
-  }
-  throw new Error("랜덤 닉네임 생성 재시도 횟수를 초과했습니다.");
-}
