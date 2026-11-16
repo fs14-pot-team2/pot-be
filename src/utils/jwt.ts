@@ -11,8 +11,18 @@ export const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const REAUTH_TOKEN_EXPIRES_IN_SECONDS = 3 * 60;
 export const REAUTH_TOKEN_MAX_AGE_MS = REAUTH_TOKEN_EXPIRES_IN_SECONDS * 1000;
 const REAUTH_PURPOSE = "profile-update";
+const SOCIAL_SIGNUP_PURPOSE = "social-signup";
+
+export const SOCIAL_SIGNUP_TOKEN_EXPIRES_IN_SECONDS = 5 * 60;
 
 export type TokenPayload = { sub: string; role: UserRole };
+
+export type SocialSignupPayload = {
+  provider: "KAKAO";
+  providerUserId: string;
+  email: string;
+  role: UserRole;
+};
 
 export function signAccessToken(payload: TokenPayload) {
   return jwt.sign(payload, env.jwtAccessSecret, {
@@ -68,6 +78,40 @@ export function verifyReauthToken(token: string): string | null {
       return null;
     }
     return sub;
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function signSocialSignupToken(payload: SocialSignupPayload) {
+  return jwt.sign({ ...payload, purpose: SOCIAL_SIGNUP_PURPOSE }, env.jwtSocialSignupSecret, {
+    algorithm: "HS256",
+    expiresIn: SOCIAL_SIGNUP_TOKEN_EXPIRES_IN_SECONDS,
+  });
+}
+
+// 유효한 가입 토큰이면 payload를 반환하고, 아니면 null
+export function verifySocialSignupToken(token: string): SocialSignupPayload | null {
+  try {
+    const decoded = jwt.verify(token, env.jwtSocialSignupSecret, {
+      algorithms: ["HS256"],
+    });
+    if (typeof decoded === "string") return null;
+
+    const { provider, providerUserId, email, role, purpose } = decoded;
+    if (
+      purpose !== SOCIAL_SIGNUP_PURPOSE ||
+      provider !== "KAKAO" ||
+      typeof providerUserId !== "string" ||
+      typeof email !== "string" ||
+      !isUserRole(role)
+    ) {
+      return null;
+    }
+    return { provider, providerUserId, email, role };
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
       return null;
