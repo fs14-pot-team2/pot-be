@@ -13,7 +13,7 @@ export const REAUTH_TOKEN_MAX_AGE_MS = REAUTH_TOKEN_EXPIRES_IN_SECONDS * 1000;
 const REAUTH_PURPOSE = "profile-update";
 const SOCIAL_SIGNUP_PURPOSE = "social-signup";
 
-export const SOCIAL_SIGNUP_TOKEN_EXPIRES_IN_SECONDS = 5 * 60;
+export const SOCIAL_SIGNUP_TOKEN_EXPIRES_IN_SECONDS = 3 * 60;
 
 export type TokenPayload = { sub: string; role: UserRole };
 
