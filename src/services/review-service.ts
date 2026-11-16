@@ -24,6 +24,7 @@ import { createNotificationMessage } from "../utils/notification-message.js";
 import { serializeDate } from "../utils/serialize-date.js";
 import type { CreateReviewInput, UpdateReviewInput } from "../validators/review-validator.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
+import { publishToUser } from "./sse-service.js";
 import type { TransactionRunner } from "../types/db.js";
 
 const REVIEW_CARE_REQUEST_UNIQUE_INDEX = "Review_careRequestId_key";
@@ -113,7 +114,7 @@ export async function createReview(
   const sitterId = careRequest.confirmedQuote.sitterId;
 
   try {
-    const review = await runTransaction(async (tx) => {
+    const createdReviewWithNotification = await runTransaction(async (tx) => {
       const createdReview = await insertReview(
         {
           careRequestId,
@@ -131,7 +132,7 @@ export async function createReview(
         throw new AppError("INTERNAL_SERVER_ERROR");
       }
 
-      await insertNotification(
+      const notification = await insertNotification(
         {
           recipientId: createdReview.sitterId,
           careRequestId,
@@ -145,8 +146,20 @@ export async function createReview(
         tx,
       );
 
-      return createdReview;
+      return {
+        review: createdReview,
+        notification: {
+          id: notification.id,
+          recipientId: notification.recipientId,
+        },
+      };
     });
+
+    publishToUser(createdReviewWithNotification.notification.recipientId, "notification.created", {
+      notificationId: createdReviewWithNotification.notification.id.toString(),
+    });
+
+    const review = createdReviewWithNotification.review;
 
     return {
       id: review.id.toString(),
