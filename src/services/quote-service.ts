@@ -38,6 +38,7 @@ import { serializeDate } from "../utils/serialize-date.js";
 import type { CreateQuoteInput } from "../validators/quote-validator.js";
 import { expireCareRequestIfPast } from "./care-request-expiration.js";
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
+import { publishToUser } from "./sse-service.js";
 
 // 팟트너의 돌봄 요청에 대한 견적 생성
 export async function createQuote(
@@ -48,7 +49,7 @@ export async function createQuote(
   runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
 ) {
   try {
-    const createdQuote = await runTransaction(async (tx) => {
+    const createdQuoteWithNotification = await runTransaction(async (tx) => {
       await lockSitterProfileByUserId(sitterId, tx);
       await lockCareRequestForUpdate(careRequestId, tx);
 
@@ -138,7 +139,7 @@ export async function createQuote(
         throw new AppError("INTERNAL_SERVER_ERROR");
       }
 
-      await insertNotification(
+      const notification = await insertNotification(
         {
           recipientId: careRequest.ownerId,
           careRequestId,
@@ -152,14 +153,24 @@ export async function createQuote(
         tx,
       );
 
-      return createdQuote;
+      return {
+        quote: createdQuote,
+        notification: {
+          id: notification.id,
+          recipientId: notification.recipientId,
+        },
+      };
     });
 
-    if (!createdQuote) {
+    if (!createdQuoteWithNotification) {
       throw new AppError("QUOTE_EDIT_NOT_ALLOWED");
     }
 
-    return createdQuote;
+    publishToUser(createdQuoteWithNotification.notification.recipientId, "notification.created", {
+      notificationId: createdQuoteWithNotification.notification.id.toString(),
+    });
+
+    return createdQuoteWithNotification.quote;
   } catch (error) {
     if (error instanceof Error && "code" in error) {
       if (
@@ -202,7 +213,7 @@ export async function updateQuoteService(
   const careRequestId = initialQuote.careRequestId;
 
   try {
-    const updatedQuote = await runTransaction(async (tx) => {
+    const updatedQuoteWithNotification = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
       const careRequest = await findCareRequest(careRequestId, tx);
@@ -247,7 +258,7 @@ export async function updateQuoteService(
           throw new AppError("INTERNAL_SERVER_ERROR");
         }
 
-        await insertNotification(
+        const notification = await insertNotification(
           {
             recipientId: careRequest.ownerId,
             careRequestId,
@@ -260,16 +271,33 @@ export async function updateQuoteService(
           },
           tx,
         );
+
+        return {
+          quote: updatedQuote,
+          notification: {
+            id: notification.id,
+            recipientId: notification.recipientId,
+          },
+        };
       }
 
-      return updatedQuote;
+      return {
+        quote: updatedQuote,
+        notification: null,
+      };
     });
 
-    if (!updatedQuote) {
+    if (!updatedQuoteWithNotification) {
       throw new AppError("QUOTE_EDIT_NOT_ALLOWED");
     }
 
-    return updatedQuote;
+    if (updatedQuoteWithNotification.notification) {
+      publishToUser(updatedQuoteWithNotification.notification.recipientId, "notification.created", {
+        notificationId: updatedQuoteWithNotification.notification.id.toString(),
+      });
+    }
+
+    return updatedQuoteWithNotification.quote;
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "P2025")) {
       throw error;
@@ -300,7 +328,7 @@ export async function confirmQuoteService(
   const careRequestId = initialQuote.careRequestId;
 
   try {
-    const confirmedQuote = await runTransaction(async (tx) => {
+    const confirmedQuoteWithNotification = await runTransaction(async (tx) => {
       await lockCareRequestForUpdate(careRequestId, tx);
 
       const careRequest = await findCareRequest(careRequestId, tx);
@@ -345,7 +373,7 @@ export async function confirmQuoteService(
         throw new AppError("INTERNAL_SERVER_ERROR");
       }
 
-      await insertNotification(
+      const notification = await insertNotification(
         {
           recipientId: targetQuote.sitterId,
           careRequestId,
@@ -374,14 +402,25 @@ export async function confirmQuoteService(
           confirmedQuoteId: confirmedRequest.confirmedQuoteId,
           updatedAt: confirmedRequest.updatedAt,
         },
+        notification: {
+          id: notification.id,
+          recipientId: notification.recipientId,
+        },
       };
     });
 
-    if (!confirmedQuote) {
+    if (!confirmedQuoteWithNotification) {
       throw new AppError("CARE_REQUEST_NOT_FOUND");
     }
 
-    return confirmedQuote;
+    publishToUser(confirmedQuoteWithNotification.notification.recipientId, "notification.created", {
+      notificationId: confirmedQuoteWithNotification.notification.id.toString(),
+    });
+
+    return {
+      quote: confirmedQuoteWithNotification.quote,
+      careRequest: confirmedQuoteWithNotification.careRequest,
+    };
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "P2025")) {
       throw error;

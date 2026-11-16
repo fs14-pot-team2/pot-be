@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { confirmQuoteService, updateQuoteService } from "../src/services/quote-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import type { TransactionRunner } from "../src/types/db.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
@@ -180,12 +182,33 @@ async function createTestRequest(startDate = futureDate(7)) {
   };
 }
 
+// 테스트 사용자의 SSE 연결을 등록하고 전송된 이벤트 수집
+function createSseEventCollector(userId: bigint) {
+  const events: string[] = [];
+
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(frame: string) {
+      events.push(frame);
+      return true;
+    },
+  } as unknown as Response;
+
+  addSseClient(userId, response);
+
+  return { events, response };
+}
+
 describe("견적 확정", () => {
   describe("동시성 및 트랜잭션", () => {
     // 동일 견적을 동시에 확정해도 하나만 성공하고 확정 결과를 유지하는지 확인
-    it("동일 견적의 동시 확정 시 중복 확정을 방지한다", async () => {
-      const { ownerId, careRequestId, quoteIds } = await createTestRequest();
+    it("동일 견적의 동시 확정 시 중복 확정을 방지한다", async (t) => {
+      const { ownerId, careRequestId, sitterIds, quoteIds } = await createTestRequest();
       const quoteId = quoteIds[0];
+      const { events, response } = createSseEventCollector(sitterIds[0]);
+
+      t.after(() => removeSseClient(sitterIds[0], response));
 
       const results = await Promise.allSettled([
         confirmQuoteService(ownerId, quoteId),
@@ -221,11 +244,26 @@ describe("견적 확정", () => {
 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0].quoteId, quoteId);
+
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+      ]);
     });
 
     // 서로 다른 견적을 동시에 확정해도 하나만 확정되고 다른 견적은 유지되는지 확인
-    it("서로 다른 견적의 동시 확정 시 중복 확정을 방지한다", async () => {
-      const { ownerId, careRequestId, quoteIds } = await createTestRequest();
+    it("서로 다른 견적의 동시 확정 시 중복 확정을 방지한다", async (t) => {
+      const { ownerId, careRequestId, sitterIds, quoteIds } = await createTestRequest();
+
+      const sitterConnections = sitterIds.map((sitterId) => ({
+        sitterId,
+        ...createSseEventCollector(sitterId),
+      }));
+
+      t.after(() => {
+        for (const connection of sitterConnections) {
+          removeSseClient(connection.sitterId, connection.response);
+        }
+      });
 
       const results = await Promise.allSettled(
         quoteIds.map((quoteId) => confirmQuoteService(ownerId, quoteId)),
@@ -261,14 +299,31 @@ describe("견적 확정", () => {
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0].quoteId, succeeded[0].value.quote.id);
       assert.equal(notifications[0].recipientId, succeeded[0].value.quote.sitterId);
+
+      for (const connection of sitterConnections) {
+        const expectedEvents =
+          connection.sitterId === notifications[0].recipientId
+            ? [`event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`]
+            : [];
+
+        assert.deepEqual(connection.events, expectedEvents);
+      }
     });
 
     // 견적 수정과 확정의 실행 순서를 각각 고정하여 수정 가능 여부를 확인
     for (const firstOperation of ["UPDATE", "CONFIRM"] as const) {
-      it(`견적 수정과 확정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async () => {
+      it(`견적 수정과 확정이 동시에 실행되면 ${firstOperation} 우선 처리 결과를 유지한다`, async (t) => {
         const { ownerId, careRequestId, sitterIds, quoteIds, originalQuotes } =
           await createTestRequest();
         const quoteId = quoteIds[0];
+
+        const ownerSse = createSseEventCollector(ownerId);
+        const sitterSse = createSseEventCollector(sitterIds[0]);
+
+        t.after(() => {
+          removeSseClient(ownerId, ownerSse.response);
+          removeSseClient(sitterIds[0], sitterSse.response);
+        });
 
         const update = (runTransaction: TransactionRunner) =>
           updateQuoteService(sitterIds[0], quoteId, { price: 25000 }, runTransaction);
@@ -338,6 +393,19 @@ describe("견적 확정", () => {
         }
 
         assert.equal(confirmedNotifications[0].recipientId, sitterIds[0]);
+
+        const expectedOwnerEvents =
+          firstOperation === "UPDATE"
+            ? [
+                `event: notification.created\ndata: {"notificationId":"${updatedNotifications[0].id}"}\n\n`,
+              ]
+            : [];
+
+        assert.deepEqual(ownerSse.events, expectedOwnerEvents);
+
+        assert.deepEqual(sitterSse.events, [
+          `event: notification.created\ndata: {"notificationId":"${confirmedNotifications[0].id}"}\n\n`,
+        ]);
       });
     }
 

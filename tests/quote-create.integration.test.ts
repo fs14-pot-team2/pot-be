@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import type { Response } from "express";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
@@ -12,6 +13,7 @@ import {
 } from "../src/services/designated-request-service.js";
 import { updateSitterProfile } from "../src/services/profile-service.js";
 import { createQuote } from "../src/services/quote-service.js";
+import { addSseClient, removeSseClient } from "../src/services/sse-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
 // 테스트에 사용할 KST 기준 날짜
@@ -127,6 +129,24 @@ async function createTestRequest(sitterCount = 2, startDate = futureDate(7)) {
   };
 }
 
+// 테스트 사용자의 SSE 연결을 등록하고 전송된 이벤트 수집
+function createSseEventCollector(userId: bigint) {
+  const events: string[] = [];
+
+  const response = {
+    writableEnded: false,
+    destroyed: false,
+    write(frame: string) {
+      events.push(frame);
+      return true;
+    },
+  } as unknown as Response;
+
+  addSseClient(userId, response);
+
+  return { events, response };
+}
+
 const quotePrice = 10000;
 const quoteComment = "테스트용 견적 내용입니다.";
 
@@ -183,8 +203,11 @@ describe("견적 생성", () => {
 
   describe("동시성 및 트랜잭션", () => {
     // 서로 다른 팟트너가 동시에 견적을 생성해도 일반 견적 5건 제한을 유지하는지 확인
-    it("동시 견적 생성 시 일반 견적 최대 5건 제한을 유지한다", async () => {
-      const { careRequestId, sitterIds } = await createTestRequest(6);
+    it("동시 견적 생성 시 일반 견적 최대 5건 제한을 유지한다", async (t) => {
+      const { ownerId, careRequestId, sitterIds } = await createTestRequest(6);
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
 
       const results = await Promise.allSettled(
         sitterIds.map((sitterId) => createQuote(sitterId, careRequestId, quotePrice, quoteComment)),
@@ -206,18 +229,33 @@ describe("견적 생성", () => {
       });
 
       assert.equal(notifications.length, succeeded.length);
+
       assert.deepEqual(
         new Set(notifications.map((notification) => notification.quoteId)),
         new Set(
           results.flatMap((result) => (result.status === "fulfilled" ? [result.value.id] : [])),
         ),
       );
+
+      assert.equal(events.length, succeeded.length);
+      assert.deepEqual(
+        events.sort(),
+        notifications
+          .map(
+            (notification) =>
+              `event: notification.created\ndata: {"notificationId":"${notification.id}"}\n\n`,
+          )
+          .sort(),
+      );
     });
 
     // 동일 팟트너의 동시 견적 생성 시 하나만 성공하고 중복 생성을 방지하는지 확인
-    it("동일 팟트너의 동시 견적 생성 시 중복 생성을 방지한다", async () => {
-      const { careRequestId, sitterIds } = await createTestRequest();
+    it("동일 팟트너의 동시 견적 생성 시 중복 생성을 방지한다", async (t) => {
+      const { ownerId, careRequestId, sitterIds } = await createTestRequest();
       const sitterId = sitterIds[0];
+      const { events, response } = createSseEventCollector(ownerId);
+
+      t.after(() => removeSseClient(ownerId, response));
 
       const results = await Promise.allSettled([
         createQuote(sitterId, careRequestId, quotePrice, quoteComment),
@@ -244,6 +282,9 @@ describe("견적 생성", () => {
         notifications[0].quoteId,
         results.find((result) => result.status === "fulfilled")?.value.id,
       );
+      assert.deepEqual(events, [
+        `event: notification.created\ndata: {"notificationId":"${notifications[0].id}"}\n\n`,
+      ]);
     });
 
     // 돌봄 요청 수정과 견적 생성이 동시에 실행될 때 처리 순서에 따른 수정 여부 확인
