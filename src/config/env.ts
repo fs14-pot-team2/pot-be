@@ -27,6 +27,13 @@ export const env = {
   get jwtReauthSecret(): string {
     return requireEnv("JWT_REAUTH_SECRET");
   },
+  get jwtSocialSignupSecret(): string {
+    return requireEnv("JWT_SOCIAL_SIGNUP_SECRET");
+  },
+  get kakaoRestApiKey(): string {
+    return requireEnv("KAKAO_REST_API_KEY");
+  },
+  kakaoClientSecret: process.env.KAKAO_CLIENT_SECRET ?? "",
   get profileImageS3Bucket(): string {
     return requireEnv("PROFILE_IMAGE_S3_BUCKET");
   },

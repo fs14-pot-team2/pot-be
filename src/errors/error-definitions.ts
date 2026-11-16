@@ -96,6 +96,28 @@ export const ERROR_DEFINITIONS = {
     statusCode: 401,
   },
 
+  // 소셜 로그인
+  SOCIAL_AUTH_FAILED: {
+    code: "SOCIAL_AUTH_FAILED",
+    message: "카카오 인증에 실패했습니다.",
+    statusCode: 401,
+  },
+  SOCIAL_SIGNUP_TOKEN_INVALID: {
+    code: "SOCIAL_SIGNUP_TOKEN_INVALID",
+    message: "유효하지 않은 가입 토큰입니다.",
+    statusCode: 401,
+  },
+  SOCIAL_EMAIL_ALREADY_EXISTS: {
+    code: "SOCIAL_EMAIL_ALREADY_EXISTS",
+    message: "이미 가입된 이메일입니다. 로그인 후 연동해주세요.",
+    statusCode: 409,
+  },
+  SOCIAL_ACCOUNT_ALREADY_LINKED: {
+    code: "SOCIAL_ACCOUNT_ALREADY_LINKED",
+    message: "이미 다른 계정에 연결된 카카오 계정입니다.",
+    statusCode: 409,
+  },
+
   // 프로필
   PROFILE_NOT_FOUND: {
     code: "PROFILE_NOT_FOUND",
