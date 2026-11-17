@@ -10,14 +10,13 @@ interface ReviewAvailableNotification {
   careRequestId: bigint;
 }
 
-// 리뷰 작성 상태를 확인 & 알림 SSE 전송 실패 시 제한 횟수 재시도
+// 신규 알림 SSE 전송 실패 시 제한 횟수 재시도
 export async function deliverReviewAvailableNotificationWithRetry(
   notification: ReviewAvailableNotification,
-  isExistingNotification: boolean,
 ): Promise<void> {
   for (let sendCount = 1; sendCount <= MAX_SEND_COUNT; sendCount++) {
-    // 기존 알림은 최초 전송부터, 신규 알림은 재시도부터 리뷰 존재 여부 확인
-    if (isExistingNotification || sendCount > 1) {
+    // 최초 전송은 생성 과정의 검증 결과를 사용하고 재시도 시 리뷰 존재 여부 재확인
+    if (sendCount > 1) {
       const review = await findReviewByCareRequestId(notification.careRequestId);
 
       if (review) {

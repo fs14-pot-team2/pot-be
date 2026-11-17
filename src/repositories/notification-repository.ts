@@ -140,24 +140,3 @@ export function insertNotifications(
     },
   });
 }
-
-// 리뷰 미작성 상태가 유지되는 기존 알림의 SSE 재전송 대상 조회
-export function findReviewAvailableNotificationsForRedelivery(today: Date, db: DbClient = prisma) {
-  return db.notification.findMany({
-    where: {
-      type: "REVIEW_AVAILABLE",
-      careRequest: {
-        status: "MATCHED",
-        confirmedQuoteId: { not: null },
-        endDate: { lt: today },
-        review: { is: null },
-      },
-    },
-    orderBy: { id: "asc" },
-    select: {
-      id: true,
-      recipientId: true,
-      careRequestId: true,
-    },
-  });
-}
