@@ -47,4 +47,7 @@ export const env = {
   get internalSseSecret(): string {
     return requireEnv("INTERNAL_SSE_SECRET");
   },
+  get internalSseEbPrivateIp(): string {
+    return requireEnv("INTERNAL_SSE_EB_PRIVATE_IP");
+  },
 };
