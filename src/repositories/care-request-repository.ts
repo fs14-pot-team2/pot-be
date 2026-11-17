@@ -362,3 +362,55 @@ export function findCareRequestQuotesHistoryByOwner(
     },
   });
 }
+
+// 리뷰 작성 가능 알림 대상 돌봄 요청 조회
+export function findCareRequestsEligibleForReviewNotification(today: Date, db: DbClient = prisma) {
+  return db.careRequest.findMany({
+    where: {
+      status: CareRequestStatus.MATCHED,
+      confirmedQuoteId: { not: null },
+      endDate: { lt: today },
+      review: { is: null },
+      notifications: {
+        none: { type: "REVIEW_AVAILABLE" },
+      },
+    },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+      ownerId: true,
+      confirmedQuote: {
+        select: {
+          sitter: {
+            select: {
+              nickname: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+// 리뷰 작성 가능 알림 저장 전 돌봄 요청 및 확정 팟트너 조회
+export function findCareRequestForReviewNotification(careRequestId: bigint, db: DbClient = prisma) {
+  return db.careRequest.findUnique({
+    where: { id: careRequestId },
+    select: {
+      id: true,
+      ownerId: true,
+      status: true,
+      endDate: true,
+      confirmedQuoteId: true,
+      confirmedQuote: {
+        select: {
+          sitter: {
+            select: {
+              nickname: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
