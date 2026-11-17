@@ -3,6 +3,7 @@ import { findReviewAvailableNotificationsForRedelivery } from "../repositories/n
 import { expirePastCareRequests } from "../services/care-request-expiration.js";
 import { deliverReviewAvailableNotificationWithRetry } from "../services/review-available-notification-delivery-service.js";
 import { createReviewAvailableNotifications } from "../services/review-available-notification-service.js";
+import { serializeBigInt } from "../utils/bigint.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 
 // 돌봄 요청 정기 만료 처리 Lambda 진입점
@@ -31,7 +32,7 @@ export async function expirePastCareRequestsHandler() {
     return {
       expiredCareRequestCount,
       reviewAvailableNotificationCount,
-      notifications,
+      notifications: serializeBigInt(notifications),
     };
   } finally {
     await prisma.$disconnect();
