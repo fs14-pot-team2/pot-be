@@ -19,7 +19,7 @@ export async function createReviewAvailableNotifications(
   const today = new Date(`${getTodayInKst()}T00:00:00.000Z`);
   const careRequests = await findCareRequestsEligibleForReviewNotification(today);
 
-  const notifications: { id: bigint; recipientId: bigint }[] = [];
+  const notifications: { id: bigint; recipientId: bigint; careRequestId: bigint }[] = [];
 
   for (const candidate of careRequests) {
     const createdNotifications = await runTransaction(async (tx) => {
@@ -66,7 +66,12 @@ export async function createReviewAvailableNotifications(
       );
     });
 
-    notifications.push(...createdNotifications);
+    notifications.push(
+      ...createdNotifications.map((notification) => ({
+        ...notification,
+        careRequestId: candidate.id,
+      })),
+    );
   }
 
   return {

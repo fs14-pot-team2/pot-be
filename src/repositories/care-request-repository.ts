@@ -378,16 +378,6 @@ export function findCareRequestsEligibleForReviewNotification(today: Date, db: D
     orderBy: { id: "asc" },
     select: {
       id: true,
-      ownerId: true,
-      confirmedQuote: {
-        select: {
-          sitter: {
-            select: {
-              nickname: true,
-            },
-          },
-        },
-      },
     },
   });
 }
