@@ -71,6 +71,10 @@ enum NotificationType {
   SITTER_CARE_ENDING
 }
 
+enum SocialProvider {
+  KAKAO
+}
+
 model User {
   id                  BigInt              @id @default(autoincrement())
   nickname            String
@@ -91,6 +95,7 @@ model User {
   writtenReviews      Review[]            @relation("OwnerReviews")
   receivedReviews     Review[]            @relation("SitterReviews")
   notifications       Notification[]
+  socialAccounts      SocialAccount[]
 
   @@unique([nickname, role])
   @@unique([email, role])
@@ -279,4 +284,17 @@ model Notification {
 
   @@index([recipientId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([recipientId, readAt])
+}
+
+model SocialAccount {
+  id             BigInt         @id @default(autoincrement())
+  userId         BigInt
+  user           User           @relation(fields: [userId], references: [id])
+  provider       SocialProvider
+  providerUserId String
+  role           UserRole
+  createdAt      DateTime       @default(now())
+
+  @@unique([provider, providerUserId, role])
+  @@unique([userId, provider])
 }

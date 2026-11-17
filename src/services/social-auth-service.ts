@@ -1,0 +1,62 @@
+import { prisma } from "../config/prisma.js";
+import AppError from "../errors/app-error.js";
+import { createKakaoAccount, findKakaoAccount } from "../repositories/social-account-repository.js";
+import { createSocialSignupUser, findUserByEmailAndRole } from "../repositories/user-repository.js";
+import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { generateRandomNickname } from "../utils/random-nickname.js";
+import type { SignupInput } from "../validators/auth-validator.js";
+
+const MAX_NICKNAME_ATTEMPTS = 10;
+
+const NICKNAME_UNIQUE_INDEX = "User_nickname_role_key";
+const EMAIL_UNIQUE_INDEX = "User_email_role_key";
+const SOCIAL_PROVIDER_UNIQUE_INDEX = "SocialAccount_provider_providerUserId_role_key";
+const SOCIAL_USER_UNIQUE_INDEX = "SocialAccount_userId_provider_key";
+
+interface CreateSocialUserInput {
+  email: string;
+  providerUserId: string;
+  role: SignupInput["role"];
+  passwordHash: string;
+}
+
+export async function createSocialUser(input: CreateSocialUserInput) {
+  const { email, providerUserId, role, passwordHash } = input;
+
+  // 사전 검증: 대부분의 충돌은 여기서 걸러진다.
+  const [emailTaken, socialLinked] = await Promise.all([
+    findUserByEmailAndRole(email, role),
+    findKakaoAccount(providerUserId, role),
+  ]);
+  if (emailTaken) throw new AppError("SOCIAL_EMAIL_ALREADY_EXISTS");
+  if (socialLinked) throw new AppError("SOCIAL_ACCOUNT_ALREADY_LINKED");
+
+  for (let attempt = 0; attempt < MAX_NICKNAME_ATTEMPTS; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const user = await createSocialSignupUser(
+          { email, passwordHash, role, nickname: generateRandomNickname() },
+          tx,
+        );
+        await createKakaoAccount({ userId: user.id, providerUserId, role }, tx);
+        return user;
+      });
+    } catch (error) {
+      const constraintName = getUniqueConstraintName(error);
+
+      if (constraintName === NICKNAME_UNIQUE_INDEX) continue; // 닉네임 충돌만 재시도
+      if (constraintName === EMAIL_UNIQUE_INDEX) {
+        throw new AppError("SOCIAL_EMAIL_ALREADY_EXISTS");
+      }
+      if (
+        constraintName === SOCIAL_PROVIDER_UNIQUE_INDEX ||
+        constraintName === SOCIAL_USER_UNIQUE_INDEX
+      ) {
+        throw new AppError("SOCIAL_ACCOUNT_ALREADY_LINKED");
+      }
+      throw error; // 식별되지 않은 오류는 원본 그대로 전파
+    }
+  }
+
+  throw new AppError("INTERNAL_SERVER_ERROR");
+}

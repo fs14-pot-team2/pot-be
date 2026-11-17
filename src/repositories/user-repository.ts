@@ -46,6 +46,30 @@ export function findUserByNicknameAndRole(nickname: string, role: UserRole, db: 
   });
 }
 
+// 이메일 + 역할 기준 중복 확인 (소셜 가입 사전 검증용)
+export function findUserByEmailAndRole(email: string, role: UserRole, db: DbClient = prisma) {
+  return db.user.findUnique({
+    where: { email_role: { email, role } },
+    select: { id: true },
+  });
+}
+
+// 소셜 가입 유저 생성 (OWNER는 ownerProfile 함께 생성)
+export function createSocialSignupUser(
+  data: { email: string; passwordHash: string; role: UserRole; nickname: string },
+  db: DbClient = prisma,
+) {
+  const { role, ...rest } = data;
+  return db.user.create({
+    data: {
+      ...rest,
+      role,
+      ...(role === "OWNER" && { ownerProfile: { create: {} } }),
+    },
+    select: { id: true, email: true, nickname: true, role: true, createdAt: true },
+  });
+}
+
 export function updateUserById(
   userId: bigint,
   data: { nickname?: string; passwordHash?: string },
