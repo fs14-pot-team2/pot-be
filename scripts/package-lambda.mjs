@@ -188,9 +188,18 @@ const runtimeFiles = [
   handlerPath,
   "dist/config/env.js",
   "dist/config/prisma.js",
+  "dist/errors/app-error.js",
+  "dist/errors/error-definitions.js",
   "dist/repositories/care-request-repository.js",
+  "dist/repositories/notification-repository.js",
+  "dist/repositories/review-repository.js",
   "dist/services/care-request-expiration.js",
+  "dist/services/internal-sse-http-service.js",
+  "dist/services/review-available-notification-delivery-service.js",
+  "dist/services/review-available-notification-service.js",
+  "dist/utils/bigint.js",
   "dist/utils/kst-date.js",
+  "dist/utils/notification-message.js",
   "dist/utils/serialize-date.js",
 ];
 
