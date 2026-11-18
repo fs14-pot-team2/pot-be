@@ -9,7 +9,7 @@ const nodeModulesRoot = path.join(projectRoot, "node_modules");
 const buildRoot = path.join(projectRoot, ".lambda-build", "care-request-expiration");
 const artifactDirectory = path.join(projectRoot, "artifacts", "lambda");
 const artifactPath = path.join(artifactDirectory, "care-request-expiration.zip");
-const handlerPath = "dist/lambda/care-request-expiration-handler.js";
+const handlerPath = "dist/lambda/scheduled-tasks-handler.js";
 const runtimePackageNames = ["@prisma/adapter-pg", "@prisma/client", "dotenv", "pg"];
 
 function run(command, args, options = {}) {
@@ -194,6 +194,8 @@ const runtimeFiles = [
   "dist/repositories/notification-repository.js",
   "dist/repositories/review-repository.js",
   "dist/services/care-request-expiration.js",
+  "dist/services/care-schedule-notification-delivery-service.js",
+  "dist/services/care-schedule-notification-service.js",
   "dist/services/internal-sse-http-service.js",
   "dist/services/review-available-notification-delivery-service.js",
   "dist/services/review-available-notification-service.js",
@@ -260,6 +262,4 @@ run(
 run("zip", ["-qr", artifactPath, "."], { cwd: buildRoot });
 
 console.log(`Lambda ZIP 생성 완료: ${artifactPath}`);
-console.log(
-  "Lambda Handler: dist/lambda/care-request-expiration-handler.expirePastCareRequestsHandler",
-);
+console.log("Lambda Handler: dist/lambda/scheduled-tasks-handler.scheduledTasksHandler");
