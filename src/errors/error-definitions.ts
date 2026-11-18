@@ -379,7 +379,7 @@ export const ERROR_DEFINITIONS = {
   // 쪽지
   INVALID_MESSAGE_CONTENT: {
     code: "INVALID_MESSAGE_CONTENT",
-    message: "쪽지 내용은 공백을 제외하고 10자 이상 1000자 이하로 입력해주세요.",
+    message: "쪽지 내용은 공백을 제외하고 1자 이상 1000자 이하로 입력해주세요.",
     statusCode: 400,
   },
   INVALID_MESSAGE_RECEIVER: {
