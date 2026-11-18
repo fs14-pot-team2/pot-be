@@ -79,5 +79,5 @@ async function fetchProfile(accessToken: string): Promise<KakaoProfile> {
     throw new AppError("SOCIAL_AUTH_FAILED");
   }
 
-  return { providerUserId: String(data.id), email };
+  return { providerUserId: String(data.id), email: email.toLowerCase() };
 }
