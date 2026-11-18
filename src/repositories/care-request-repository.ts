@@ -470,3 +470,25 @@ export function findCareRequestForCareScheduleNotification(
     },
   });
 }
+
+// 활성 돌봄 요청 만료 임박 알림 대상 조회
+export function findCareRequestsEligibleForExpiringNotification(
+  today: Date,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.findMany({
+    where: {
+      status: CareRequestStatus.OPEN,
+      startDate: today,
+      notifications: {
+        none: {
+          type: NotificationType.CARE_REQUEST_EXPIRING,
+        },
+      },
+    },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+    },
+  });
+}
