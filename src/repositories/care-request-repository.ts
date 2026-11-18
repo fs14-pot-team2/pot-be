@@ -1,6 +1,6 @@
 import { prisma } from "../config/prisma.js";
 import type { Prisma } from "../generated/prisma/client.js";
-import { CareRequestStatus, type Region } from "../generated/prisma/enums.js";
+import { CareRequestStatus, NotificationType, type Region } from "../generated/prisma/enums.js";
 import type { DbClient } from "../types/db.js";
 import type {
   CareRequestQuotesHistoryQuery,
@@ -394,6 +394,72 @@ export function findCareRequestForReviewNotification(careRequestId: bigint, db: 
       confirmedQuoteId: true,
       confirmedQuote: {
         select: {
+          sitter: {
+            select: {
+              nickname: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+// 돌봄 시작·종료 임박 알림 대상 요청 조회
+export function findCareRequestsEligibleForCareScheduleNotification(
+  date: Date,
+  dateField: "startDate" | "endDate",
+  db: DbClient = prisma,
+) {
+  const isCareStarting = dateField === "startDate";
+
+  const ownerNotificationType = isCareStarting
+    ? NotificationType.OWNER_CARE_STARTED
+    : NotificationType.OWNER_CARE_ENDING;
+
+  const sitterNotificationType = isCareStarting
+    ? NotificationType.SITTER_CARE_STARTED
+    : NotificationType.SITTER_CARE_ENDING;
+
+  return db.careRequest.findMany({
+    where: {
+      status: CareRequestStatus.MATCHED,
+      confirmedQuoteId: { not: null },
+      [dateField]: date,
+      OR: [
+        { notifications: { none: { type: ownerNotificationType } } },
+        { notifications: { none: { type: sitterNotificationType } } },
+      ],
+    },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+    },
+  });
+}
+
+// 돌봄 일정 알림 저장 전 요청 및 확정 팟트너 정보 조회
+export function findCareRequestForCareScheduleNotification(
+  careRequestId: bigint,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.findUnique({
+    where: { id: careRequestId },
+    select: {
+      id: true,
+      ownerId: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      confirmedQuoteId: true,
+      owner: {
+        select: {
+          nickname: true,
+        },
+      },
+      confirmedQuote: {
+        select: {
+          sitterId: true,
           sitter: {
             select: {
               nickname: true,
