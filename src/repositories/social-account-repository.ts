@@ -10,6 +10,14 @@ export function findKakaoAccount(providerUserId: string, role: UserRole, db: DbC
   });
 }
 
+// 사용자의 카카오 연동 여부 조회 (userId 기준)
+export function findKakaoAccountByUserId(userId: bigint, db: DbClient = prisma) {
+  return db.socialAccount.findUnique({
+    where: { userId_provider: { userId, provider: "KAKAO" } },
+    select: { id: true },
+  });
+}
+
 // 카카오 계정 연동 생성
 export function createKakaoAccount(
   data: { userId: bigint; providerUserId: string; role: UserRole },
