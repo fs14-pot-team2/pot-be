@@ -60,6 +60,25 @@ describe("카카오 로그인 요청 검증", () => {
       isAppError("INVALID_REQUEST"),
     );
   });
+
+  it("redirectUri가 http, https 스킴이 아니면 INVALID_REQUEST다", () => {
+    for (const redirectUri of [
+      "javascript:alert(1)",
+      "ftp://example.com/callback",
+      "kakao123://oauth",
+    ]) {
+      assert.throws(
+        () => validateKakaoLogin({ ...valid, redirectUri }),
+        isAppError("INVALID_REQUEST"),
+      );
+    }
+  });
+
+  it("redirectUri가 https 스킴이면 허용한다", () => {
+    const input = { ...valid, redirectUri: "https://example.com/auth/kakao/callback" };
+
+    assert.deepEqual(validateKakaoLogin(input), input);
+  });
 });
 
 describe("카카오 프로필 조회", () => {
