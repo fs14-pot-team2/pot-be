@@ -72,6 +72,24 @@ describe("카카오 프로필 조회", () => {
     globalThis.fetch = originalFetch;
   });
 
+  it("카카오 서버 오류(5xx)면 INTERNAL_SERVER_ERROR다", async () => {
+    mockKakaoFetch({ tokenResponse: new Response("{}", { status: 503 }) });
+
+    await assert.rejects(
+      fetchKakaoProfile("code", "http://localhost:3000/callback"),
+      isAppError("INTERNAL_SERVER_ERROR"),
+    );
+  });
+
+  it("프로필 조회가 5xx면 INTERNAL_SERVER_ERROR다", async () => {
+    mockKakaoFetch({ profileResponse: new Response("{}", { status: 500 }) });
+
+    await assert.rejects(
+      fetchKakaoProfile("code", "http://localhost:3000/callback"),
+      isAppError("INTERNAL_SERVER_ERROR"),
+    );
+  });
+
   it("정상 응답이면 providerUserId와 email을 반환한다", async () => {
     mockKakaoFetch({ profileResponse: Response.json(validProfile) });
 

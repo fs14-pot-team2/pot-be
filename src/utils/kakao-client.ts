@@ -17,10 +17,20 @@ type KakaoUserResponse = {
 };
 
 // 인가 코드를 카카오 토큰으로 교환하고, 사용자 ID와 이메일을 조회한다.
-// 카카오 응답이 실패이거나 필수 정보가 없으면 SOCIAL_AUTH_FAILED
+// 카카오 4xx 응답이거나 필수 정보가 없으면 SOCIAL_AUTH_FAILED,
+// 카카오 서버 오류(5xx)·네트워크 오류·타임아웃은 INTERNAL_SERVER_ERROR
 export async function fetchKakaoProfile(code: string, redirectUri: string): Promise<KakaoProfile> {
   const accessToken = await exchangeCodeForToken(code, redirectUri);
   return fetchProfile(accessToken);
+}
+
+// 카카오 4xx는 인증 실패(코드 만료·거부 등), 그 외(5xx 등)는 외부 서비스 장애로 처리
+function assertKakaoResponseOk(response: Response) {
+  if (response.ok) return;
+  if (response.status >= 400 && response.status < 500) {
+    throw new AppError("SOCIAL_AUTH_FAILED");
+  }
+  throw new AppError("INTERNAL_SERVER_ERROR");
 }
 
 async function exchangeCodeForToken(code: string, redirectUri: string): Promise<string> {
@@ -38,7 +48,7 @@ async function exchangeCodeForToken(code: string, redirectUri: string): Promise<
     body,
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  if (!response.ok) throw new AppError("SOCIAL_AUTH_FAILED");
+  assertKakaoResponseOk(response);
 
   const data = (await response.json()) as KakaoTokenResponse;
   if (typeof data.access_token !== "string" || data.access_token.length === 0) {
@@ -52,7 +62,7 @@ async function fetchProfile(accessToken: string): Promise<KakaoProfile> {
     headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  if (!response.ok) throw new AppError("SOCIAL_AUTH_FAILED");
+  assertKakaoResponseOk(response);
 
   const data = (await response.json()) as KakaoUserResponse;
   const account = data.kakao_account;
