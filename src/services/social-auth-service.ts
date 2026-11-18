@@ -17,10 +17,10 @@ import type { TransactionRunner } from "../types/db.js";
 
 const MAX_NICKNAME_ATTEMPTS = 10;
 
-const NICKNAME_UNIQUE_INDEX = "User_nickname_role_key";
-const EMAIL_UNIQUE_INDEX = "User_email_role_key";
-const SOCIAL_PROVIDER_UNIQUE_INDEX = "SocialAccount_provider_providerUserId_role_key";
-const SOCIAL_USER_UNIQUE_INDEX = "SocialAccount_userId_provider_key";
+export const NICKNAME_UNIQUE_INDEX = "User_nickname_role_key";
+export const EMAIL_UNIQUE_INDEX = "User_email_role_key";
+export const SOCIAL_PROVIDER_UNIQUE_INDEX = "SocialAccount_provider_providerUserId_role_key";
+export const SOCIAL_USER_UNIQUE_INDEX = "SocialAccount_userId_provider_key";
 
 interface CreateSocialUserInput {
   email: string;
