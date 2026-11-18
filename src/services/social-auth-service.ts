@@ -6,8 +6,9 @@ import {
   findKakaoAccountWithUser,
 } from "../repositories/social-account-repository.js";
 import { createSocialSignupUser, findUserByEmailAndRole } from "../repositories/user-repository.js";
-import { signSocialSignupToken } from "../utils/jwt.js";
+import { signSocialSignupToken, type SocialSignupPayload } from "../utils/jwt.js";
 import { fetchKakaoProfile } from "../utils/kakao-client.js";
+import { hashPassword } from "../utils/password.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import { generateRandomNickname } from "../utils/random-nickname.js";
 import type { SignupInput } from "../validators/auth-validator.js";
@@ -97,4 +98,14 @@ export async function authenticateWithKakao(input: KakaoLoginInput): Promise<Kak
     isNewUser: true,
     signupToken: signSocialSignupToken({ provider: "KAKAO", providerUserId, email, role }),
   };
+}
+
+export async function completeKakaoSignup(payload: SocialSignupPayload, password: string) {
+  const passwordHash = await hashPassword(password);
+  return createSocialUser({
+    email: payload.email,
+    providerUserId: payload.providerUserId,
+    role: payload.role,
+    passwordHash,
+  });
 }
