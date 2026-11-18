@@ -18,6 +18,9 @@ export function validateOtherUserIdParam(value: unknown): bigint {
   return id;
 }
 
+const MESSAGE_CONTENT_MIN_LENGTH = 1;
+const MESSAGE_CONTENT_MAX_LENGTH = 1000;
+
 // 글자 수는 공백 제외 기준(리뷰·견적 검증과 동일하게 length 사용), 저장은 원문 유지(trim 미적용)
 function validateContent(content: unknown): string {
   if (typeof content !== "string") {
@@ -25,7 +28,7 @@ function validateContent(content: unknown): string {
   }
 
   const contentLength = content.replace(/\s/g, "").length;
-  if (contentLength < 10 || contentLength > 1000) {
+  if (contentLength < MESSAGE_CONTENT_MIN_LENGTH || contentLength > MESSAGE_CONTENT_MAX_LENGTH) {
     throw new AppError("INVALID_MESSAGE_CONTENT");
   }
 
