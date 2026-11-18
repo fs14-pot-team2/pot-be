@@ -91,6 +91,23 @@ describe("카카오 프로필 조회", () => {
     globalThis.fetch = originalFetch;
   });
 
+  it("이메일은 소문자로 정규화해 반환한다", async () => {
+    mockKakaoFetch({
+      profileResponse: Response.json({
+        id: 12345,
+        kakao_account: {
+          email: "User@Example.COM",
+          is_email_valid: true,
+          is_email_verified: true,
+        },
+      }),
+    });
+
+    const profile = await fetchKakaoProfile("code", "http://localhost:3000/callback");
+
+    assert.equal(profile.email, "user@example.com");
+  });
+
   it("카카오 서버 오류(5xx)면 INTERNAL_SERVER_ERROR다", async () => {
     mockKakaoFetch({ tokenResponse: new Response("{}", { status: 503 }) });
 

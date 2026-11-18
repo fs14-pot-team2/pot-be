@@ -1,5 +1,6 @@
 import AppError from "../errors/app-error.js";
 import { isUserRole, type UserRole } from "../types/auth.js";
+import { validatePassword } from "./auth-validator.js";
 
 export type KakaoLoginInput = {
   role: UserRole;
@@ -27,4 +28,15 @@ export function validateKakaoLogin(body: unknown): KakaoLoginInput {
   }
 
   return { role, code, redirectUri };
+}
+
+export type KakaoSignupInput = { password: string };
+
+export function validateKakaoSignup(body: unknown): KakaoSignupInput {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new AppError("INVALID_REQUEST");
+  }
+  const { password } = body as Record<string, unknown>;
+
+  return { password: validatePassword(password) };
 }
