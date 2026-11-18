@@ -10,9 +10,14 @@ import {
   setRefreshTokenCookie,
 } from "../utils/auth-cookie.js";
 import { serializeBigInt } from "../utils/bigint.js";
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+  verifySocialSignupToken,
+} from "../utils/jwt.js";
 import { validateLogin, validateSignup } from "../validators/auth-validator.js";
-import { validateKakaoLogin } from "../validators/social-auth-validator.js";
+import { validateKakaoLogin, validateKakaoSignup } from "../validators/social-auth-validator.js";
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
   try {
@@ -63,6 +68,31 @@ export async function kakaoLogin(req: Request, res: Response, next: NextFunction
 
     setRefreshTokenCookie(res, refreshToken);
     res.status(200).json(serializeBigInt({ isNewUser: false, accessToken, user }));
+  } catch (error) {
+    next(error);
+  }
+}
+
+function getBearerToken(req: Request): string | undefined {
+  const [scheme, token] = (req.headers.authorization ?? "").split(" ");
+  return scheme === "Bearer" && token ? token : undefined;
+}
+
+export async function kakaoSignup(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = getBearerToken(req);
+    const signupPayload = token ? verifySocialSignupToken(token) : null;
+    if (!signupPayload) throw new AppError("SOCIAL_SIGNUP_TOKEN_INVALID");
+
+    const { password } = validateKakaoSignup(req.body);
+    const user = await socialAuthService.completeKakaoSignup(signupPayload, password);
+
+    const payload = { sub: user.id.toString(), role: user.role };
+    const accessToken = signAccessToken(payload);
+    const refreshToken = signRefreshToken(payload);
+
+    setRefreshTokenCookie(res, refreshToken);
+    res.status(201).json(serializeBigInt({ accessToken, user }));
   } catch (error) {
     next(error);
   }

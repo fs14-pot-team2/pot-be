@@ -19,6 +19,13 @@ export const PASSWORD_REGEX = /^[A-Za-z0-9!@#$]{8,20}$/;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+export function validatePassword(password: unknown): string {
+  if (typeof password !== "string" || !PASSWORD_REGEX.test(password)) {
+    throw new AppError("INVALID_PASSWORD_FORMAT");
+  }
+  return password;
+}
+
 export function validateSignup(body: unknown): SignupInput {
   if (typeof body !== "object" || body === null) {
     throw new AppError("INVALID_REQUEST");
@@ -32,16 +39,14 @@ export function validateSignup(body: unknown): SignupInput {
   if (typeof nickname !== "string" || !NICKNAME_REGEX.test(nickname)) {
     throw new AppError("INVALID_NICKNAME_FORMAT");
   }
-  if (typeof password !== "string" || !PASSWORD_REGEX.test(password)) {
-    throw new AppError("INVALID_PASSWORD_FORMAT");
-  }
+  const validPassword = validatePassword(password);
   if (!isUserRole(role)) {
     throw new AppError("INVALID_USER_ROLE");
   }
 
   return {
     email: email.toLowerCase(),
-    password,
+    password: validPassword,
     nickname,
     role,
   };
