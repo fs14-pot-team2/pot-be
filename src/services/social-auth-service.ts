@@ -13,6 +13,7 @@ import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import { generateRandomNickname } from "../utils/random-nickname.js";
 import type { SignupInput } from "../validators/auth-validator.js";
 import type { KakaoLoginInput } from "../validators/social-auth-validator.js";
+import type { TransactionRunner } from "../types/db.js";
 
 const MAX_NICKNAME_ATTEMPTS = 10;
 
@@ -28,7 +29,10 @@ interface CreateSocialUserInput {
   passwordHash: string;
 }
 
-export async function createSocialUser(input: CreateSocialUserInput) {
+export async function createSocialUser(
+  input: CreateSocialUserInput,
+  runTransaction: TransactionRunner = (callback) => prisma.$transaction(callback),
+) {
   const { email, providerUserId, role, passwordHash } = input;
 
   // 사전 검증: 대부분의 충돌은 여기서 걸러진다.
@@ -41,7 +45,7 @@ export async function createSocialUser(input: CreateSocialUserInput) {
 
   for (let attempt = 0; attempt < MAX_NICKNAME_ATTEMPTS; attempt++) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await runTransaction(async (tx) => {
         const user = await createSocialSignupUser(
           { email, passwordHash, role, nickname: generateRandomNickname() },
           tx,
