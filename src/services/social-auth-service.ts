@@ -1,10 +1,17 @@
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
-import { createKakaoAccount, findKakaoAccount } from "../repositories/social-account-repository.js";
+import {
+  createKakaoAccount,
+  findKakaoAccount,
+  findKakaoAccountWithUser,
+} from "../repositories/social-account-repository.js";
 import { createSocialSignupUser, findUserByEmailAndRole } from "../repositories/user-repository.js";
+import { signSocialSignupToken } from "../utils/jwt.js";
+import { fetchKakaoProfile } from "../utils/kakao-client.js";
 import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import { generateRandomNickname } from "../utils/random-nickname.js";
 import type { SignupInput } from "../validators/auth-validator.js";
+import type { KakaoLoginInput } from "../validators/social-auth-validator.js";
 
 const MAX_NICKNAME_ATTEMPTS = 10;
 
@@ -59,4 +66,35 @@ export async function createSocialUser(input: CreateSocialUserInput) {
   }
 
   throw new AppError("INTERNAL_SERVER_ERROR");
+}
+
+export type KakaoAuthResult =
+  | {
+      isNewUser: false;
+      user: {
+        id: bigint;
+        email: string;
+        nickname: string;
+        role: SignupInput["role"];
+        createdAt: Date;
+      };
+    }
+  | { isNewUser: true; signupToken: string };
+
+export async function authenticateWithKakao(input: KakaoLoginInput): Promise<KakaoAuthResult> {
+  const { role, code, redirectUri } = input;
+  const { providerUserId, email } = await fetchKakaoProfile(code, redirectUri);
+
+  // 기존 소셜 가입자: (provider, providerUserId, role)로 조회
+  const account = await findKakaoAccountWithUser(providerUserId, role);
+  if (account) return { isNewUser: false, user: account.user };
+
+  // 신규: 같은 역할로 이미 가입된 이메일이면 임시 토큰을 발급하지 않는다
+  const emailTaken = await findUserByEmailAndRole(email, role);
+  if (emailTaken) throw new AppError("SOCIAL_EMAIL_ALREADY_EXISTS");
+
+  return {
+    isNewUser: true,
+    signupToken: signSocialSignupToken({ provider: "KAKAO", providerUserId, email, role }),
+  };
 }
