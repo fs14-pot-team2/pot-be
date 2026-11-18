@@ -87,7 +87,9 @@ export async function kakaoSignup(req: Request, res: Response, next: NextFunctio
   try {
     const token = getBearerToken(req);
     const signupPayload = token ? verifySocialSignupToken(token) : null;
-    if (!signupPayload) throw new AppError("SOCIAL_SIGNUP_TOKEN_INVALID");
+    if (!signupPayload || signupPayload.provider !== "KAKAO") {
+      throw new AppError("SOCIAL_SIGNUP_TOKEN_INVALID");
+    }
 
     const { password } = validateKakaoSignup(req.body);
     const user = await socialAuthService.completeKakaoSignup(signupPayload, password);
