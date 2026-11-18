@@ -129,9 +129,11 @@ export function insertNotification(
 export function insertNotifications(
   notificationData: Prisma.NotificationCreateManyInput[],
   db: DbClient = prisma,
+  options: { skipDuplicates?: boolean } = {},
 ) {
   return db.notification.createManyAndReturn({
     data: notificationData,
+    ...(options.skipDuplicates && { skipDuplicates: true }),
     select: {
       id: true,
       recipientId: true,
