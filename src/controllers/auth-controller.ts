@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import AppError from "../errors/app-error.js";
 import * as authService from "../services/auth-service.js";
+import * as socialAuthService from "../services/social-auth-service.js";
 import {
   clearReauthCookie,
   clearRefreshTokenCookie,
@@ -11,6 +12,7 @@ import {
 import { serializeBigInt } from "../utils/bigint.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
 import { validateLogin, validateSignup } from "../validators/auth-validator.js";
+import { validateKakaoLogin } from "../validators/social-auth-validator.js";
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
   try {
@@ -39,6 +41,28 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     setRefreshTokenCookie(res, refreshToken);
     res.status(200).json(serializeBigInt({ accessToken, user }));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function kakaoLogin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = validateKakaoLogin(req.body);
+    const result = await socialAuthService.authenticateWithKakao(input);
+
+    if (result.isNewUser) {
+      res.status(200).json({ isNewUser: true, signupToken: result.signupToken });
+      return;
+    }
+
+    const { user } = result;
+    const payload = { sub: user.id.toString(), role: user.role };
+    const accessToken = signAccessToken(payload);
+    const refreshToken = signRefreshToken(payload);
+
+    setRefreshTokenCookie(res, refreshToken);
+    res.status(200).json(serializeBigInt({ isNewUser: false, accessToken, user }));
   } catch (error) {
     next(error);
   }
