@@ -6,8 +6,8 @@ import { deliverReviewAvailableNotificationWithRetry } from "../services/review-
 import { createReviewAvailableNotifications } from "../services/review-available-notification-service.js";
 import { serializeBigInt } from "../utils/bigint.js";
 
-// 돌봄 요청 정기 만료 처리 Lambda 진입점
-export async function expirePastCareRequestsHandler() {
+// 예약 작업 실행 Lambda 진입점
+export async function scheduledTasksHandler() {
   try {
     // 시작일이 지난 OPEN 돌봄 요청 정기 만료 처리
     const expiredCareRequestCount = await expirePastCareRequests();
