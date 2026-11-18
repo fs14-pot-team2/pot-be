@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import AppError from "../errors/app-error.js";
 import * as authService from "../services/auth-service.js";
 import * as socialAuthService from "../services/social-auth-service.js";
+import * as socialLinkService from "../services/social-link-service.js";
 import {
   clearReauthCookie,
   clearRefreshTokenCookie,
@@ -17,7 +18,11 @@ import {
   verifySocialSignupToken,
 } from "../utils/jwt.js";
 import { validateLogin, validateSignup } from "../validators/auth-validator.js";
-import { validateKakaoLogin, validateKakaoSignup } from "../validators/social-auth-validator.js";
+import {
+  validateKakaoLink,
+  validateKakaoLogin,
+  validateKakaoSignup,
+} from "../validators/social-auth-validator.js";
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
   try {
@@ -93,6 +98,19 @@ export async function kakaoSignup(req: Request, res: Response, next: NextFunctio
 
     setRefreshTokenCookie(res, refreshToken);
     res.status(201).json(serializeBigInt({ accessToken, user }));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function linkKakao(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) throw new AppError("UNAUTHORIZED");
+
+    const input = validateKakaoLink(req.body);
+    await socialLinkService.connectKakaoAccount(req.user, input);
+
+    res.status(201).json({ provider: "KAKAO" });
   } catch (error) {
     next(error);
   }
