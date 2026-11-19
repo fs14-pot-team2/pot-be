@@ -9,7 +9,6 @@ import { createCareScheduleNotifications } from "./care-schedule-notification-se
 import { deliverReviewAvailableNotificationWithRetry } from "./review-available-notification-delivery-service.js";
 import { createReviewAvailableNotifications } from "./review-available-notification-service.js";
 import type { ScheduledTasksOutput, ScheduledTasksRunner } from "../types/scheduled-tasks.js";
-import { serializeBigInt } from "../utils/bigint.js";
 
 // 실행 환경에 종속되지 않는 공통 예약 작업 실행
 export const runScheduledTasks: ScheduledTasksRunner = async (): Promise<ScheduledTasksOutput> => {
@@ -49,12 +48,19 @@ export const runScheduledTasks: ScheduledTasksRunner = async (): Promise<Schedul
     await deliverCareRequestExpiringNotificationWithRetry(notification);
   }
 
-  const notifications = [
+  /* 공통 serializeBigInt()는 unknown을 반환하므로, 반환 계약의 타입 검증을 위해
+     알림 식별자만 명시적으로 문자열 변환하고 유형별 추가 필드는 그대로 유지 */
+  const notifications: ScheduledTasksOutput["notifications"] = [
     ...careRequestExpiredNotifications,
     ...reviewAvailableNotifications,
     ...careScheduleNotifications,
     ...careRequestExpiringNotifications,
-  ];
+  ].map((notification) => ({
+    ...notification,
+    id: notification.id.toString(),
+    recipientId: notification.recipientId.toString(),
+    careRequestId: notification.careRequestId.toString(),
+  }));
 
   return {
     expiredCareRequestCount,
@@ -62,6 +68,6 @@ export const runScheduledTasks: ScheduledTasksRunner = async (): Promise<Schedul
     reviewAvailableNotificationCount,
     careScheduleNotificationCount,
     careRequestExpiringNotificationCount,
-    notifications: serializeBigInt(notifications) as ScheduledTasksOutput["notifications"],
+    notifications,
   };
 };
