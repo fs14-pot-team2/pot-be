@@ -51,13 +51,17 @@ export function expireCareRequest(careRequestId: bigint, db: DbClient = prisma) 
 
 // 시작일이 지난 모든 활성 돌봄 요청을 기간 만료 상태로 변경
 export function expireAllPastCareRequests(today: Date, db: DbClient = prisma) {
-  return db.careRequest.updateMany({
+  return db.careRequest.updateManyAndReturn({
     where: {
       status: CareRequestStatus.OPEN,
       startDate: { lt: today },
     },
     data: {
       status: CareRequestStatus.EXPIRED,
+    },
+    select: {
+      id: true,
+      ownerId: true,
     },
   });
 }
@@ -489,6 +493,38 @@ export function findCareRequestsEligibleForExpiringNotification(
     orderBy: { id: "asc" },
     select: {
       id: true,
+    },
+  });
+}
+
+// 견적을 제출한 돌봄 요청의 만료 알림 대상 요청 및 해당 견적 제출 팟트너 조회
+export function findExpiredCareRequestsForNotification(
+  earliestEligibleStartDate: Date,
+  today: Date,
+  db: DbClient = prisma,
+) {
+  return db.careRequest.findMany({
+    where: {
+      status: CareRequestStatus.EXPIRED,
+      startDate: {
+        gte: earliestEligibleStartDate,
+        lt: today,
+      },
+      quotes: { some: {} },
+    },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+      owner: {
+        select: {
+          nickname: true,
+        },
+      },
+      quotes: {
+        select: {
+          sitterId: true,
+        },
+      },
     },
   });
 }

@@ -22,6 +22,10 @@ interface CareScheduleNotification extends NotificationForDelivery {
   scheduledDate: string;
 }
 
+interface CareRequestExpiredNotification extends NotificationForDelivery {
+  careRequestId: bigint;
+}
+
 // 알림별 유효성 검증을 유지하면서 SSE 전송·재시도 공통 처리
 async function deliverNotificationWithRetry(
   notification: NotificationForDelivery,
@@ -73,7 +77,7 @@ async function deliverNotificationWithRetry(
   }
 }
 
-// 신규 만료 임박 알림 SSE 전송 실패 시 제한 횟수 재시도
+// 활성 돌봄 요청 만료 임박 신규 알림 SSE 전송 실패 시 제한 횟수 재시도
 export async function deliverCareRequestExpiringNotificationWithRetry(
   notification: CareRequestExpiringNotification,
 ): Promise<void> {
@@ -104,7 +108,7 @@ export async function deliverCareRequestExpiringNotificationWithRetry(
   );
 }
 
-// 신규 알림 SSE 전송 실패 시 제한 횟수 재시도
+// 매칭된 돌봄 일정 신규 알림 SSE 전송 실패 시 제한 횟수 재시도
 export async function deliverCareScheduleNotificationWithRetry(
   notification: CareScheduleNotification,
 ): Promise<void> {
@@ -146,5 +150,27 @@ export async function deliverCareScheduleNotificationWithRetry(
     },
     "돌봄 일정 알림 SSE 전송 최종 실패",
     { event: notification.event },
+  );
+}
+
+// 견적을 보낸 돌봄 요청 만료 신규 알림 SSE 전송 실패 시 제한 횟수 재시도
+export async function deliverCareRequestExpiredNotificationWithRetry(
+  notification: CareRequestExpiredNotification,
+): Promise<void> {
+  return deliverNotificationWithRetry(
+    notification,
+    async (sendCount) => {
+      // 최초 전송은 생성 시 검증 결과를 사용하고 재시도 시 만료 상태 재확인
+      if (sendCount > 1) {
+        const careRequest = await findCareRequest(notification.careRequestId);
+
+        if (!careRequest || careRequest.status !== CareRequestStatus.EXPIRED) {
+          return false;
+        }
+      }
+
+      return true;
+    },
+    "돌봄 요청 만료 알림 SSE 전송 최종 실패",
   );
 }
