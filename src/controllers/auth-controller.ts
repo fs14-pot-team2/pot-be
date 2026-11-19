@@ -22,6 +22,7 @@ import {
   validateKakaoLink,
   validateKakaoLogin,
   validateKakaoSignup,
+  validateGoogleLogin,
 } from "../validators/social-auth-validator.js";
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
@@ -56,23 +57,34 @@ export async function login(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+function sendSocialLoginResult(res: Response, result: socialAuthService.KakaoAuthResult) {
+  if (result.isNewUser) {
+    res.status(200).json({ isNewUser: true, signupToken: result.signupToken });
+    return;
+  }
+
+  const { user } = result;
+  const payload = { sub: user.id.toString(), role: user.role };
+  const accessToken = signAccessToken(payload);
+  const refreshToken = signRefreshToken(payload);
+
+  setRefreshTokenCookie(res, refreshToken);
+  res.status(200).json(serializeBigInt({ isNewUser: false, accessToken, user }));
+}
+
 export async function kakaoLogin(req: Request, res: Response, next: NextFunction) {
   try {
     const input = validateKakaoLogin(req.body);
-    const result = await socialAuthService.authenticateWithKakao(input);
+    sendSocialLoginResult(res, await socialAuthService.authenticateWithKakao(input));
+  } catch (error) {
+    next(error);
+  }
+}
 
-    if (result.isNewUser) {
-      res.status(200).json({ isNewUser: true, signupToken: result.signupToken });
-      return;
-    }
-
-    const { user } = result;
-    const payload = { sub: user.id.toString(), role: user.role };
-    const accessToken = signAccessToken(payload);
-    const refreshToken = signRefreshToken(payload);
-
-    setRefreshTokenCookie(res, refreshToken);
-    res.status(200).json(serializeBigInt({ isNewUser: false, accessToken, user }));
+export async function googleLogin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = validateGoogleLogin(req.body);
+    sendSocialLoginResult(res, await socialAuthService.authenticateWithGoogle(input));
   } catch (error) {
     next(error);
   }
