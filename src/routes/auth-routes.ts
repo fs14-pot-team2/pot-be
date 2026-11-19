@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   googleLogin,
+  googleSignup,
   kakaoLogin,
   kakaoSignup,
   login,
@@ -19,5 +20,6 @@ router.post("/refresh", refresh);
 router.post("/kakao", kakaoLogin);
 router.post("/kakao/signup", kakaoSignup);
 router.post("/google", googleLogin);
+router.post("/google/signup", googleSignup);
 
 export default router;
