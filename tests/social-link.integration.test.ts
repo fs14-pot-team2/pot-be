@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
-import { linkKakaoAccount } from "../src/services/social-link-service.js";
+import { linkKakaoAccount, linkSocialAccount } from "../src/services/social-link-service.js";
 import type { DbClient } from "../src/types/db.js";
 
 type Role = "OWNER" | "SITTER";
@@ -120,5 +120,80 @@ describe("카카오 계정 연동 동시성", () => {
         assert.equal(await prisma.socialAccount.count({ where: { userId: user.id } }), 0);
       });
     }
+  });
+});
+
+describe("구글 계정 연동", () => {
+  it("같은 사용자가 카카오와 구글을 모두 연동할 수 있다", async () => {
+    const user = await createTestUser("OWNER");
+
+    await linkKakaoAccount({
+      userId: user.id,
+      providerUserId: `kakao-${randomUUID()}`,
+      role: "OWNER",
+    });
+    await linkSocialAccount({
+      provider: "GOOGLE",
+      userId: user.id,
+      providerUserId: `google-${randomUUID()}`,
+      role: "OWNER",
+    });
+
+    assert.equal(await prisma.socialAccount.count({ where: { userId: user.id } }), 2);
+  });
+
+  it("같은 사용자가 구글을 동시에 연동하면 한 건만 성공한다", async () => {
+    const user = await createTestUser("OWNER");
+
+    const results = await Promise.allSettled([
+      linkSocialAccount({
+        provider: "GOOGLE",
+        userId: user.id,
+        providerUserId: `google-${randomUUID()}`,
+        role: "OWNER",
+      }),
+      linkSocialAccount({
+        provider: "GOOGLE",
+        userId: user.id,
+        providerUserId: `google-${randomUUID()}`,
+        role: "OWNER",
+      }),
+    ]);
+
+    const rejected = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(rejected.length, 1);
+    assert.ok(assertAppError("SOCIAL_ACCOUNT_ALREADY_LINKED")(rejected[0].reason));
+    assert.equal(
+      await prisma.socialAccount.count({ where: { userId: user.id, provider: "GOOGLE" } }),
+      1,
+    );
+  });
+
+  it("같은 구글 계정을 다른 사용자가 동시에 연동하면 한 건만 성공한다", async () => {
+    const [first, second] = await Promise.all([createTestUser("OWNER"), createTestUser("OWNER")]);
+    const providerUserId = `google-${randomUUID()}`;
+
+    const results = await Promise.allSettled([
+      linkSocialAccount({ provider: "GOOGLE", userId: first.id, providerUserId, role: "OWNER" }),
+      linkSocialAccount({ provider: "GOOGLE", userId: second.id, providerUserId, role: "OWNER" }),
+    ]);
+
+    const rejected = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(rejected.length, 1);
+    assert.ok(assertAppError("SOCIAL_ACCOUNT_ALREADY_LINKED")(rejected[0].reason));
+    assert.equal(
+      await prisma.socialAccount.count({
+        where: { provider: "GOOGLE", providerUserId, role: "OWNER" },
+      }),
+      1,
+    );
   });
 });

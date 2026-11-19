@@ -22,6 +22,7 @@ import {
   validateKakaoLink,
   validateKakaoLogin,
   validateKakaoSignup,
+  validateGoogleLink,
   validateGoogleLogin,
   validateGoogleSignup,
 } from "../validators/social-auth-validator.js";
@@ -141,6 +142,19 @@ export async function linkKakao(req: Request, res: Response, next: NextFunction)
     await socialLinkService.connectKakaoAccount(req.user, input);
 
     res.status(201).json({ provider: "KAKAO" });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function linkGoogle(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) throw new AppError("UNAUTHORIZED");
+
+    const input = validateGoogleLink(req.body);
+    await socialLinkService.connectGoogleAccount(req.user, input);
+
+    res.status(201).json({ provider: "GOOGLE" });
   } catch (error) {
     next(error);
   }
