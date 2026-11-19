@@ -12,6 +12,9 @@ import { completeSocialSignup, createSocialUser } from "../src/services/social-a
 import type { TransactionRunner } from "../src/types/db.js";
 import { signSocialSignupToken, type SocialSignupPayload } from "../src/utils/jwt.js";
 
+// env는 접근 시점에 읽으므로, 테스트에 필요한 시크릿을 미리 세팅한다.
+process.env.JWT_SOCIAL_SIGNUP_SECRET ??= "test-social-signup-secret";
+
 const PASSWORD = "Password123!";
 
 // Prisma P2002 UNIQUE 제약 충돌 오류 생성
