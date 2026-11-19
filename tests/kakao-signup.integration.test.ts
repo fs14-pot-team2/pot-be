@@ -166,6 +166,7 @@ describe("카카오 가입 완료 동시성 및 트랜잭션", () => {
           createSocialUser(
             {
               email: payload.email,
+              provider: "KAKAO",
               providerUserId: payload.providerUserId,
               role: payload.role,
               passwordHash: "test-only",

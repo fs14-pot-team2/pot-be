@@ -44,7 +44,7 @@ export const ERROR_DEFINITIONS = {
   // 인증 / 회원
   INVALID_USER_ROLE: {
     code: "INVALID_USER_ROLE",
-    message: "올바르지 않은 사용자 역할입니다.",
+    message: "올바르지 않은 회원 유형입니다.",
     statusCode: 400,
   },
   INVALID_EMAIL_FORMAT: {
@@ -99,12 +99,12 @@ export const ERROR_DEFINITIONS = {
   // 소셜 로그인
   SOCIAL_AUTH_FAILED: {
     code: "SOCIAL_AUTH_FAILED",
-    message: "카카오 인증에 실패했습니다.",
+    message: "소셜 로그인 인증에 실패했습니다.",
     statusCode: 401,
   },
   SOCIAL_SIGNUP_TOKEN_INVALID: {
     code: "SOCIAL_SIGNUP_TOKEN_INVALID",
-    message: "유효하지 않은 가입 토큰입니다.",
+    message: "유효하지 않은 토큰입니다.",
     statusCode: 401,
   },
   SOCIAL_EMAIL_ALREADY_EXISTS: {
@@ -114,7 +114,7 @@ export const ERROR_DEFINITIONS = {
   },
   SOCIAL_ACCOUNT_ALREADY_LINKED: {
     code: "SOCIAL_ACCOUNT_ALREADY_LINKED",
-    message: "이미 다른 계정에 연결된 카카오 계정입니다.",
+    message: "이미 연동된 소셜 계정입니다.",
     statusCode: 409,
   },
 

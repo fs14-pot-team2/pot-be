@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { isUserRole, type UserRole } from "../types/auth.js";
 import { parseBigId } from "./bigint.js";
+import { isSocialProvider, type SocialProvider } from "../types/social.js";
 
 const ACCESS_TOKEN_EXPIRES_IN = "30m";
 const REFRESH_TOKEN_EXPIRES_IN = "7d";
@@ -18,7 +19,7 @@ export const SOCIAL_SIGNUP_TOKEN_EXPIRES_IN_SECONDS = 3 * 60;
 export type TokenPayload = { sub: string; role: UserRole };
 
 export type SocialSignupPayload = {
-  provider: "KAKAO";
+  provider: SocialProvider;
   providerUserId: string;
   email: string;
   role: UserRole;
@@ -104,7 +105,7 @@ export function verifySocialSignupToken(token: string): SocialSignupPayload | nu
     const { provider, providerUserId, email, role, purpose } = decoded;
     if (
       purpose !== SOCIAL_SIGNUP_PURPOSE ||
-      provider !== "KAKAO" ||
+      !isSocialProvider(provider) ||
       typeof providerUserId !== "string" ||
       typeof email !== "string" ||
       !isUserRole(role)
