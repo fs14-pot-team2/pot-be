@@ -200,6 +200,7 @@ const runtimeFiles = [
   "dist/services/internal-sse-http-service.js",
   "dist/services/review-available-notification-delivery-service.js",
   "dist/services/review-available-notification-service.js",
+  "dist/services/scheduled-tasks-service.js",
   "dist/utils/bigint.js",
   "dist/utils/kst-date.js",
   "dist/utils/notification-message.js",
