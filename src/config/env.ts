@@ -35,6 +35,12 @@ export const env = {
     return requireEnv("KAKAO_REST_API_KEY");
   },
   kakaoClientSecret: process.env.KAKAO_CLIENT_SECRET ?? "",
+  get googleClientId(): string {
+    return requireEnv("GOOGLE_CLIENT_ID");
+  },
+  get googleClientSecret(): string {
+    return requireEnv("GOOGLE_CLIENT_SECRET");
+  },
   get profileImageS3Bucket(): string {
     return requireEnv("PROFILE_IMAGE_S3_BUCKET");
   },
