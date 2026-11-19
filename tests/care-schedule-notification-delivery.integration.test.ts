@@ -8,7 +8,7 @@ import { after, before, describe, it, type TestContext } from "node:test";
 
 import { env } from "../src/config/env.js";
 import { prisma } from "../src/config/prisma.js";
-import { deliverCareScheduleNotificationWithRetry } from "../src/services/care-schedule-notification-delivery-service.js";
+import { deliverCareScheduleNotificationWithRetry } from "../src/services/care-request-notification-delivery-service.js";
 import { createCareScheduleNotifications } from "../src/services/care-schedule-notification-service.js";
 import { getTodayInKst } from "../src/utils/kst-date.js";
 
