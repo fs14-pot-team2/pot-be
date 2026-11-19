@@ -61,14 +61,15 @@ describe("구글 프로필 조회", () => {
     assert.deepEqual(calls[1]?.init?.headers, { Authorization: "Bearer google-token" });
   });
 
-  it("email_verified가 문자열 'true'여도 허용한다", async () => {
+  it("email_verified가 boolean true가 아니면 SOCIAL_AUTH_FAILED다", async () => {
     mockGoogleFetch({
       profileResponse: Response.json({ ...validProfile, email_verified: "true" }),
     });
 
-    const profile = await fetchGoogleProfile("code", REDIRECT_URI);
-
-    assert.equal(profile.email, "user@example.com");
+    await assert.rejects(
+      fetchGoogleProfile("code", REDIRECT_URI),
+      isAppError("SOCIAL_AUTH_FAILED"),
+    );
   });
 
   it("이메일이 검증되지 않았으면 SOCIAL_AUTH_FAILED다", async () => {

@@ -73,7 +73,7 @@ async function fetchProfile(accessToken: string): Promise<GoogleProfile> {
     sub.length === 0 ||
     typeof email !== "string" ||
     email.length === 0 ||
-    (emailVerified !== true && emailVerified !== "true")
+    emailVerified !== true
   ) {
     throw new AppError("SOCIAL_AUTH_FAILED");
   }
