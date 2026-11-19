@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 
 import AppError from "../src/errors/app-error.js";
 import { fetchGoogleProfile } from "../src/utils/google-client.js";
+import { validateGoogleLogin } from "../src/validators/social-auth-validator.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -28,6 +29,53 @@ function mockGoogleFetch(options: { tokenResponse?: Response; profileResponse?: 
 
 const validProfile = { sub: "109876543210", email: "User@Example.com", email_verified: true };
 const REDIRECT_URI = "http://localhost:3000/auth/google/callback";
+
+describe("구글 로그인 요청 검증", () => {
+  const valid = {
+    role: "OWNER",
+    code: "auth-code",
+    redirectUri: "http://localhost:3000/auth/google/callback",
+  };
+
+  it("올바른 요청은 그대로 반환한다", () => {
+    assert.deepEqual(validateGoogleLogin(valid), valid);
+  });
+
+  it("body가 객체가 아니면 INVALID_REQUEST다", () => {
+    assert.throws(() => validateGoogleLogin(null), isAppError("INVALID_REQUEST"));
+    assert.throws(() => validateGoogleLogin([]), isAppError("INVALID_REQUEST"));
+  });
+
+  it("role이 올바르지 않으면 INVALID_USER_ROLE이다", () => {
+    assert.throws(
+      () => validateGoogleLogin({ ...valid, role: "ADMIN" }),
+      isAppError("INVALID_USER_ROLE"),
+    );
+  });
+
+  it("code가 비었거나 문자열이 아니면 INVALID_REQUEST다", () => {
+    assert.throws(
+      () => validateGoogleLogin({ ...valid, code: "  " }),
+      isAppError("INVALID_REQUEST"),
+    );
+    assert.throws(() => validateGoogleLogin({ ...valid, code: 1 }), isAppError("INVALID_REQUEST"));
+  });
+
+  it("redirectUri가 http, https URL이 아니면 INVALID_REQUEST다", () => {
+    for (const redirectUri of ["not-a-url", "javascript:alert(1)", "ftp://example.com/callback"]) {
+      assert.throws(
+        () => validateGoogleLogin({ ...valid, redirectUri }),
+        isAppError("INVALID_REQUEST"),
+      );
+    }
+  });
+
+  it("redirectUri가 https 스킴이면 허용한다", () => {
+    const input = { ...valid, redirectUri: "https://example.com/auth/google/callback" };
+
+    assert.deepEqual(validateGoogleLogin(input), input);
+  });
+});
 
 describe("구글 프로필 조회", () => {
   beforeEach(() => {
