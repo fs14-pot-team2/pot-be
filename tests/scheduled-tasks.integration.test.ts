@@ -47,7 +47,7 @@ async function createTestRequest(type: TestRequestType): Promise<TestFixture> {
   const owner = await prisma.user.create({
     data: {
       email: `scheduled-owner-${uniqueId}@example.com`,
-      nickname: `scheduled-owner-${uniqueId}`,
+      nickname: `o${uniqueId.slice(0, 6)}`,
       passwordHash: "test-only",
       role: "OWNER",
       ownerProfile: { create: {} },
@@ -87,7 +87,7 @@ async function createTestRequest(type: TestRequestType): Promise<TestFixture> {
   const sitter = await prisma.user.create({
     data: {
       email: `scheduled-sitter-${uniqueId}@example.com`,
-      nickname: `scheduled-sitter-${uniqueId}`,
+      nickname: `s${uniqueId.slice(0, 6)}`,
       passwordHash: "test-only",
       role: "SITTER",
       sitterProfile: {
@@ -325,10 +325,21 @@ describe("예약 작업 공통 실행 및 Lambda 연동", () => {
   });
 
   describe("공통 예약 작업 실행", () => {
-    // Lambda Handler 없이 기존 Service를 호출해 돌봄 요청 만료 상태를 저장하는지 확인
+    // Lambda Handler 없이 실행하고 Prisma 연결 종료 책임이 분리되어 있는지 확인
     it("Lambda Handler 없이 예약 작업을 실행하고 처리 결과를 반환한다", async (t) => {
       const fixture = await createTestRequest("EXPIRED");
       mockHttpsRequests(t);
+
+      const originalDisconnect = prisma.$disconnect;
+      let disconnectCount = 0;
+
+      prisma.$disconnect = async () => {
+        disconnectCount++;
+      };
+
+      t.after(() => {
+        prisma.$disconnect = originalDisconnect;
+      });
 
       const result = await runScheduledTasks();
 
@@ -339,6 +350,7 @@ describe("예약 작업 공통 실행 및 Lambda 연동", () => {
       assert.equal(savedRequest.status, "EXPIRED");
       assert.ok(result.expiredCareRequestCount >= 1);
       assert.equal(findCreatedNotifications(result, fixture.careRequestId).length, 1);
+      assert.equal(disconnectCount, 0);
 
       assertScheduledTasksOutput(result);
     });
@@ -379,6 +391,32 @@ describe("예약 작업 공통 실행 및 Lambda 연동", () => {
 
       assert.deepEqual(sentIds, returnedIds);
     });
+
+    // 공통 실행 함수 자체가 DB 오류를 변환하지 않고 전달하는지 확인
+    it("공통 예약 작업 실행 중 DB 오류가 발생하면 원본 Prisma 오류를 전달한다", async (t) => {
+      const originalTransaction = prisma.$transaction;
+
+      const prismaError = Object.assign(new Error("Record not found"), {
+        code: "P2025",
+      });
+
+      prisma.$transaction = async () => {
+        throw prismaError;
+      };
+
+      t.after(() => {
+        prisma.$transaction = originalTransaction;
+      });
+
+      await assert.rejects(
+        runScheduledTasks(),
+        (error: unknown) =>
+          error === prismaError &&
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "P2025",
+      );
+    });
   });
 
   describe("Lambda Handler 연동", () => {
@@ -390,7 +428,6 @@ describe("예약 작업 공통 실행 및 Lambda 연동", () => {
       const originalDisconnect = prisma.$disconnect;
       let disconnectCount = 0;
 
-      // 테스트 종료 시 원본 Prisma 연결 종료 메서드 복원
       prisma.$disconnect = async () => {
         disconnectCount++;
       };
@@ -408,7 +445,7 @@ describe("예약 작업 공통 실행 및 Lambda 연동", () => {
       assert.equal(disconnectCount, 1);
     });
 
-    // 정상 실행과 오류 발생 시 모두 Prisma 연결 종료 함수가 호출되는지 확인
+    // 정상 실행과 오류 발생 시 모두 Prisma 연결을 종료하는지 확인
     it("정상 실행과 오류 발생 시 Prisma 연결을 종료한다", async (t) => {
       const originalTransaction = prisma.$transaction;
       const originalDisconnect = prisma.$disconnect;
@@ -437,42 +474,6 @@ describe("예약 작업 공통 실행 및 Lambda 연동", () => {
       await assert.rejects(scheduledTasksHandler(), (error: unknown) => error === transactionError);
 
       assert.equal(disconnectCount, 2);
-    });
-
-    // 공통 예약 작업에서 발생한 Prisma 오류를 변환하지 않고 전달하는지 확인
-    it("공통 예약 작업 실행 중 DB 오류가 발생하면 원본 Prisma 오류를 전달한다", async (t) => {
-      const originalTransaction = prisma.$transaction;
-      const originalDisconnect = prisma.$disconnect;
-
-      const prismaError = Object.assign(new Error("Record not found"), {
-        code: "P2025",
-      });
-
-      let disconnectCount = 0;
-
-      prisma.$transaction = async () => {
-        throw prismaError;
-      };
-
-      prisma.$disconnect = async () => {
-        disconnectCount++;
-      };
-
-      t.after(() => {
-        prisma.$transaction = originalTransaction;
-        prisma.$disconnect = originalDisconnect;
-      });
-
-      await assert.rejects(
-        scheduledTasksHandler(),
-        (error: unknown) =>
-          error === prismaError &&
-          error instanceof Error &&
-          "code" in error &&
-          error.code === "P2025",
-      );
-
-      assert.equal(disconnectCount, 1);
     });
   });
 });
