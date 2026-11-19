@@ -67,3 +67,8 @@ export function validateKakaoLink(body: unknown): KakaoLinkInput {
 }
 
 export const validateGoogleSignup = validateKakaoSignup;
+export type GoogleLinkInput = KakaoLinkInput;
+
+export function validateGoogleLink(body: unknown): GoogleLinkInput {
+  return validateKakaoLink(body);
+}
