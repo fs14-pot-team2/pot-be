@@ -44,7 +44,7 @@ export const ERROR_DEFINITIONS = {
   // 인증 / 회원
   INVALID_USER_ROLE: {
     code: "INVALID_USER_ROLE",
-    message: "올바르지 않은 사용자 역할입니다.",
+    message: "올바르지 않은 사용자입니다.",
     statusCode: 400,
   },
   INVALID_EMAIL_FORMAT: {
