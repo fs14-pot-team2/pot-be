@@ -65,3 +65,5 @@ export function validateKakaoLink(body: unknown): KakaoLinkInput {
 
   return validateCodeAndRedirectUri(code, redirectUri);
 }
+
+export const validateGoogleSignup = validateKakaoSignup;
