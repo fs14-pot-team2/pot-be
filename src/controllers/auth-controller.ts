@@ -23,7 +23,9 @@ import {
   validateKakaoLogin,
   validateKakaoSignup,
   validateGoogleLogin,
+  validateGoogleSignup,
 } from "../validators/social-auth-validator.js";
+import type { SocialProvider } from "../types/social.js";
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
   try {
@@ -95,16 +97,22 @@ function getBearerToken(req: Request): string | undefined {
   return scheme === "Bearer" && token ? token : undefined;
 }
 
-export async function kakaoSignup(req: Request, res: Response, next: NextFunction) {
+async function handleSocialSignup(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  provider: SocialProvider,
+  validate: (body: unknown) => { password: string },
+) {
   try {
     const token = getBearerToken(req);
     const signupPayload = token ? verifySocialSignupToken(token) : null;
-    if (!signupPayload || signupPayload.provider !== "KAKAO") {
+    if (!signupPayload || signupPayload.provider !== provider) {
       throw new AppError("SOCIAL_SIGNUP_TOKEN_INVALID");
     }
 
-    const { password } = validateKakaoSignup(req.body);
-    const user = await socialAuthService.completeKakaoSignup(signupPayload, password);
+    const { password } = validate(req.body);
+    const user = await socialAuthService.completeSocialSignup(signupPayload, password);
 
     const payload = { sub: user.id.toString(), role: user.role };
     const accessToken = signAccessToken(payload);
@@ -115,6 +123,14 @@ export async function kakaoSignup(req: Request, res: Response, next: NextFunctio
   } catch (error) {
     next(error);
   }
+}
+
+export function kakaoSignup(req: Request, res: Response, next: NextFunction) {
+  return handleSocialSignup(req, res, next, "KAKAO", validateKakaoSignup);
+}
+
+export function googleSignup(req: Request, res: Response, next: NextFunction) {
+  return handleSocialSignup(req, res, next, "GOOGLE", validateGoogleSignup);
 }
 
 export async function linkKakao(req: Request, res: Response, next: NextFunction) {
