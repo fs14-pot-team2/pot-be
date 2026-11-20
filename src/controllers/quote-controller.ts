@@ -1,4 +1,5 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 import AppError from "../errors/app-error.js";
 import {
   confirmQuoteService,
@@ -15,11 +16,7 @@ import {
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 
 // 팟트너의 견적 생성
-export async function createQuoteController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function createQuoteController(req: AuthenticatedRequest, res: Response) {
   const sitterId = req.user.id;
   const careRequestId = parseBigId(req.params.careRequestId);
 
@@ -45,11 +42,7 @@ export async function createQuoteController(req: Request, res: Response) {
 }
 
 // 팟트너의 견적 수정
-export async function updateQuoteController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function updateQuoteController(req: AuthenticatedRequest, res: Response) {
   const sitterId = req.user.id;
   const quoteId = parseBigId(req.params.quoteId);
 
@@ -74,11 +67,7 @@ export async function updateQuoteController(req: Request, res: Response) {
 }
 
 // 팟오너의 견적 확정
-export async function confirmQuoteController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function confirmQuoteController(req: AuthenticatedRequest, res: Response) {
   const ownerId = req.user.id;
   const quoteId = parseBigId(req.params.quoteId);
 
@@ -92,11 +81,7 @@ export async function confirmQuoteController(req: Request, res: Response) {
 }
 
 // 팟오너·팟트너의 견적 상세 조회
-export async function getQuoteDetailController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getQuoteDetailController(req: AuthenticatedRequest, res: Response) {
   const quoteId = parseBigId(req.params.quoteId);
 
   if (quoteId === null) {
@@ -109,11 +94,7 @@ export async function getQuoteDetailController(req: Request, res: Response) {
 }
 
 // 팟트너가 보낸 견적 목록 조회
-export async function getSentQuotesController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getSentQuotesController(req: AuthenticatedRequest, res: Response) {
   const sitterId = req.user.id;
   const { page, pageSize, confirmedOnly } = validateSentQuotesQuery(
     req.query.page,

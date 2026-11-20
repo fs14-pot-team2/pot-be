@@ -7,49 +7,43 @@ import {
   updateSitterProfileController,
   getSitterMyPageController,
 } from "../controllers/profile-controller.js";
-import { authenticate, authorize } from "../middlewares/auth-middleware.js";
+import { authorize } from "../middlewares/auth-middleware.js";
+import { withAuthentication } from "../middlewares/authenticated-handler.js";
 
 export const profileRouter = Router();
 
 // 프로필 조회 - 팟오너
 profileRouter.get(
   "/owners/me/profile",
-  authenticate,
-  authorize("OWNER"),
-  getOwnerProfileController,
+  withAuthentication(getOwnerProfileController, authorize("OWNER")),
 );
 
 // 프로필 수정 - 팟오너
 profileRouter.patch(
   "/owners/me/profile",
-  authenticate,
-  authorize("OWNER"),
-  updateOwnerProfileController,
+  withAuthentication(updateOwnerProfileController, authorize("OWNER")),
 );
 
 // 프로필 등록 - 팟트너
 profileRouter.post(
   "/sitters/me/profile",
-  authenticate,
-  authorize("SITTER"),
-  createSitterProfileController,
+  withAuthentication(createSitterProfileController, authorize("SITTER")),
 );
 
 // 프로필 조회 - 팟트너
 profileRouter.get(
   "/sitters/me/profile",
-  authenticate,
-  authorize("SITTER"),
-  getSitterProfileController,
+  withAuthentication(getSitterProfileController, authorize("SITTER")),
 );
 
 // 프로필 수정 - 팟트너
 profileRouter.patch(
   "/sitters/me/profile",
-  authenticate,
-  authorize("SITTER"),
-  updateSitterProfileController,
+  withAuthentication(updateSitterProfileController, authorize("SITTER")),
 );
 
 // 마이페이지 조회 - 팟트너
-profileRouter.get("/sitters/me", authenticate, authorize("SITTER"), getSitterMyPageController);
+profileRouter.get(
+  "/sitters/me",
+  withAuthentication(getSitterMyPageController, authorize("SITTER")),
+);

@@ -5,34 +5,32 @@ import {
   markAllNotificationsAsReadController,
   markNotificationAsReadController,
 } from "../controllers/notification-controller.js";
-import { authenticate, authorize } from "../middlewares/auth-middleware.js";
+import { authorize } from "../middlewares/auth-middleware.js";
+import { withAuthentication } from "../middlewares/authenticated-handler.js";
 
 export const notificationRouter = Router();
 
 // 팟오너·팟트너
 // 알림 목록 조회
-notificationRouter.get("/", authenticate, authorize("OWNER", "SITTER"), getNotificationsController);
+notificationRouter.get(
+  "/",
+  withAuthentication(getNotificationsController, authorize("OWNER", "SITTER")),
+);
 
 // 미확인 알림 존재 여부 조회
 notificationRouter.get(
   "/unread",
-  authenticate,
-  authorize("OWNER", "SITTER"),
-  hasUnreadNotificationController,
+  withAuthentication(hasUnreadNotificationController, authorize("OWNER", "SITTER")),
 );
 
 // 알림 단건 읽음 처리
 notificationRouter.patch(
   "/:notificationId/read",
-  authenticate,
-  authorize("OWNER", "SITTER"),
-  markNotificationAsReadController,
+  withAuthentication(markNotificationAsReadController, authorize("OWNER", "SITTER")),
 );
 
 // 본인 미확인 알림 일괄 읽음 처리
 notificationRouter.patch(
   "/read-all",
-  authenticate,
-  authorize("OWNER", "SITTER"),
-  markAllNotificationsAsReadController,
+  withAuthentication(markAllNotificationsAsReadController, authorize("OWNER", "SITTER")),
 );
