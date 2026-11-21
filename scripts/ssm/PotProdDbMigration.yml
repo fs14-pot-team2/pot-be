@@ -1,0 +1,107 @@
+schemaVersion: "2.2"
+description: "POT production migration artifact verification"
+
+parameters:
+  artifactKey:
+    type: String
+    description: "Production migration ZIP S3 key"
+    interpolationType: ENV_VAR
+    allowedPattern: '^migrations/prod/[a-f0-9]{40}/[0-9]+-[0-9]+/prisma-migrate\.zip$'
+
+  artifactSha256:
+    type: String
+    description: "Expected SHA256 checksum"
+    interpolationType: ENV_VAR
+    allowedPattern: "^[a-f0-9]{64}$"
+
+  expectedDbName:
+    type: String
+    description: "Expected production database name"
+    interpolationType: ENV_VAR
+    allowedPattern: "^[a-z][a-z0-9_]{0,62}$"
+
+  expectedDbHost:
+    type: String
+    description: "Expected production RDS hostname"
+    interpolationType: ENV_VAR
+    allowedPattern: "^[a-zA-Z0-9.-]+$"
+
+mainSteps:
+  - name: VerifyMigrationArtifact
+    action: aws:runShellScript
+    precondition:
+      StringEquals:
+        - platformType
+        - Linux
+    inputs:
+      timeoutSeconds: "600"
+      runCommand:
+        - |
+          set -euo pipefail
+
+          : "${SSM_artifactKey:?Missing artifact key}"
+          : "${SSM_artifactSha256:?Missing SHA256}"
+          : "${SSM_expectedDbName:?Missing expected DB name}"
+          : "${SSM_expectedDbHost:?Missing expected DB host}"
+
+          if [[ "$SSM_expectedDbName" != "pot" ||
+                "$SSM_expectedDbHost" != "pot-db.cjoa6sm627we.ap-northeast-2.rds.amazonaws.com" ]]; then
+            echo "Unexpected production database target." >&2
+            exit 1
+          fi
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+
+          aws s3 cp \
+            "s3://pot-db-migration-artifacts-492562025293/${SSM_artifactKey}" \
+            "$workdir/prisma-migrate.zip" \
+            --region ap-northeast-2 --only-show-errors
+
+          printf '%s  %s\n' \
+            "$SSM_artifactSha256" \
+            "$workdir/prisma-migrate.zip" | sha256sum --check --status
+
+          unzip -q "$workdir/prisma-migrate.zip" -d "$workdir/package"
+
+          for required in \
+            "run-migrate.sh" \
+            "prisma/schema.prisma" \
+            "prisma/migrations/migration_lock.toml" \
+            "node_modules/prisma/build/index.js"; do
+
+            if [[ ! -f "$workdir/package/$required" ]]; then
+              echo "Missing migration file: $required" >&2
+              exit 1
+            fi
+          done
+
+
+
+          echo "Artifact verification passed."
+
+          # 운영 DB 연결 정보를 안전하게 조회
+          DATABASE_URL="$(aws ssm get-parameter \
+            --name "/pot/prod/migration/database-url" \
+            --with-decryption \
+            --region ap-northeast-2 \
+            --query 'Parameter.Value' \
+            --output text)"
+
+          if [[ -z "$DATABASE_URL" || "$DATABASE_URL" == "None" ]]; then
+            echo "Production database URL is unavailable." >&2
+            exit 1
+          fi
+
+          export DATABASE_URL
+          export POT_MIGRATION_ENV=prod
+
+          export POT_EXPECTED_DB_NAME="$SSM_expectedDbName"
+          export POT_EXPECTED_DB_HOST="$SSM_expectedDbHost"
+
+          echo "Production migration execution is disabled." >&2
+          exit 1
+
+          # QA 종료 후 운영 전환 시 실행할 마이그레이션
+          echo "Starting production Prisma migration."
+          bash "$workdir/package/run-migrate.sh"

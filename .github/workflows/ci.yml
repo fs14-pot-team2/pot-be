@@ -281,3 +281,236 @@ jobs:
           version-label: ${{ github.sha }}
           deployment-package-path: deploy.zip
           use-existing-application-version-if-available: true
+
+  migration-package-prod:
+    name: migration-package-prod
+    needs: [quality, integration-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      s3_key: ${{ steps.upload.outputs.s3_key }}
+      sha256: ${{ steps.upload.outputs.sha256 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: 운영 마이그레이션 ZIP 생성
+        run: |
+          npm run package:migration
+          test -f artifacts/migration/prisma-migrate.zip
+
+      - name: AWS 운영 역할 연결
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_MIGRATION_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: 운영 ZIP S3 업로드
+        id: upload
+        env:
+          GIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          S3_KEY="migrations/prod/${GIT_SHA}/${RUN_ID}-${RUN_ATTEMPT}/prisma-migrate.zip"
+          SHA256=$(sha256sum artifacts/migration/prisma-migrate.zip | cut -d' ' -f1)
+
+          aws s3 cp \
+            artifacts/migration/prisma-migrate.zip \
+            "s3://pot-db-migration-artifacts-492562025293/${S3_KEY}" \
+            --region ap-northeast-2
+
+          echo "s3_key=${S3_KEY}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+
+  migrate-prod-db:
+    name: migrate-prod-db
+    needs: [migration-package-prod]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: AWS 운영 역할 연결
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_MIGRATION_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: 운영 마이그레이션 실행 및 결과 확인
+        env:
+          MIGRATION_SHA: ${{ github.sha }}
+          S3_KEY: ${{ needs.migration-package-prod.outputs.s3_key }}
+          ARTIFACT_SHA256: ${{ needs.migration-package-prod.outputs.sha256 }}
+          EXPECTED_DB_NAME: ${{ vars.POT_PROD_DB_NAME }}
+          EXPECTED_DB_HOST: ${{ vars.POT_PROD_DB_HOST }}
+        run: |
+          set -euo pipefail
+
+          # 운영 DB 설정 및 마이그레이션 파일 검증
+          : "${EXPECTED_DB_NAME:?Missing production DB name}"
+          : "${EXPECTED_DB_HOST:?Missing production DB host}"
+          : "${S3_KEY:?Missing migration artifact key}"
+          : "${ARTIFACT_SHA256:?Missing artifact checksum}"
+
+          if [[ "$EXPECTED_DB_NAME" != "pot" ||
+                "$EXPECTED_DB_HOST" != "pot-db.cjoa6sm627we.ap-northeast-2.rds.amazonaws.com" ]]; then
+            echo "Unexpected production database target." >&2
+            exit 1
+          fi
+
+          # 최신 main 커밋인지 확인
+          LATEST_SHA=$(git ls-remote \
+            https://github.com/${{ github.repository }}.git \
+            refs/heads/main | cut -f1)
+
+          if [[ -z "$LATEST_SHA" || "$MIGRATION_SHA" != "$LATEST_SHA" ]]; then
+            echo "최신 main 커밋이 아니므로 실행 중단"
+            exit 1
+          fi
+
+          # 실행 직전에 EB 인스턴스 조회
+          INSTANCES=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:elasticbeanstalk:environment-id,Values=e-bguisk9r44" \
+              "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].InstanceId' \
+            --output json)
+
+          COUNT=$(jq 'length' <<< "$INSTANCES")
+
+          if [[ "$COUNT" -ne 1 ]]; then
+            echo "EB 인스턴스가 정확히 1대가 아니므로 중단: $COUNT"
+            exit 1
+          fi
+
+          INSTANCE_ID=$(jq -r '.[0]' <<< "$INSTANCES")
+
+          # 운영 전용 SSM 문서 실행
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name PotProdDbMigration \
+            --document-version "2" \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters \
+              "artifactKey=${S3_KEY},artifactSha256=${ARTIFACT_SHA256},expectedDbName=${EXPECTED_DB_NAME},expectedDbHost=${EXPECTED_DB_HOST}" \
+            --timeout-seconds 600 \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM 명령 시작: $COMMAND_ID"
+
+          # SSM 실행 결과 확인
+          for i in {1..150}; do
+            if STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --plugin-name VerifyMigrationArtifact \
+              --query Status \
+              --output text 2>&1); then
+              :
+            elif [[ "$STATUS" == *"InvocationDoesNotExist"* ]]; then
+              STATUS="Pending"
+            else
+              echo "SSM 상태 조회 실패: $STATUS" >&2
+              exit 1
+            fi
+
+            echo "Migration status: $STATUS"
+
+            case "$STATUS" in
+              Success)
+                echo "PROD_MIGRATION_SUCCEEDED"
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut|Undeliverable|Terminated)
+                echo "PROD_MIGRATION_FAILED"
+                exit 1
+                ;;
+              Pending|InProgress|Delayed|Cancelling)
+                ;;
+              *)
+                echo "Unexpected SSM status: $STATUS"
+                exit 1
+                ;;
+            esac
+
+            sleep 10
+          done
+
+          echo "Production migration wait timed out"
+          exit 1
+
+  deploy-prod:
+    name: deploy-prod
+    needs: [migrate-prod-db]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: 운영 배포 파일 빌드
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm prune --omit=dev --ignore-scripts
+          test -f dist/index.js
+          zip -qr deploy.zip package.json package-lock.json dist node_modules .ebextensions .platform
+
+      - name: AWS 배포 역할 연결
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ap-northeast-2
+
+      - name: 최신 main 커밋 확인
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          LATEST_SHA=$(git ls-remote origin refs/heads/main | cut -f1)
+
+          if [[ -z "$LATEST_SHA" || "$DEPLOY_SHA" != "$LATEST_SHA" ]]; then
+            echo "최신 main 커밋이 아니므로 운영 배포를 중단합니다."
+            exit 1
+          fi
+
+          echo "최신 main 커밋 확인 완료"
+
+      - name: Elastic Beanstalk 운영 배포
+        uses: aws-actions/aws-elasticbeanstalk-deploy@v1
+        with:
+          aws-region: ap-northeast-2
+          application-name: pot-be
+          environment-name: pot-be-env
+          version-label: ${{ github.sha }}
+          deployment-package-path: deploy.zip
+          use-existing-application-version-if-available: true
