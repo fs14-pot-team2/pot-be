@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 import * as reviewService from "../services/review-service.js";
 import { validatePagination } from "../validators/pagination-validator.js";
 import { validateSitterIdParam } from "../validators/sitter-validator.js";
@@ -8,7 +9,6 @@ import {
   validateReviewIdParam,
   validateUpdateReviewBody,
 } from "../validators/review-validator.js";
-import AppError from "../errors/app-error.js";
 
 export async function getSitterReviewsController(req: Request, res: Response, next: NextFunction) {
   try {
@@ -21,12 +21,12 @@ export async function getSitterReviewsController(req: Request, res: Response, ne
   }
 }
 
-export async function createReviewController(req: Request, res: Response, next: NextFunction) {
+export async function createReviewController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
-    if (!req.user) {
-      throw new AppError("UNAUTHORIZED");
-    }
-
     const careRequestId = validateCareRequestIdParam(req.params.careRequestId);
     const input = validateCreateReviewBody(req.body);
     const result = await reviewService.createReview(req.user.id, careRequestId, input);
@@ -37,15 +37,11 @@ export async function createReviewController(req: Request, res: Response, next: 
 }
 
 export async function getWritableReviewsController(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ) {
   try {
-    if (!req.user) {
-      throw new AppError("UNAUTHORIZED");
-    }
-
     const { page, pageSize } = validatePagination(req.query.page, req.query.pageSize);
     const result = await reviewService.getWritableReviews(req.user.id, page, pageSize);
     res.status(200).json(result);
@@ -54,12 +50,12 @@ export async function getWritableReviewsController(
   }
 }
 
-export async function getMyReviewsController(req: Request, res: Response, next: NextFunction) {
+export async function getMyReviewsController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
-    if (!req.user) {
-      throw new AppError("UNAUTHORIZED");
-    }
-
     const { page, pageSize } = validatePagination(req.query.page, req.query.pageSize);
     const result = await reviewService.getMyReviews(req.user.id, page, pageSize);
     res.status(200).json(result);
@@ -68,12 +64,12 @@ export async function getMyReviewsController(req: Request, res: Response, next: 
   }
 }
 
-export async function updateReviewController(req: Request, res: Response, next: NextFunction) {
+export async function updateReviewController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
-    if (!req.user) {
-      throw new AppError("UNAUTHORIZED");
-    }
-
     const reviewId = validateReviewIdParam(req.params.reviewId);
     const input = validateUpdateReviewBody(req.body);
     const result = await reviewService.updateReview(req.user.id, reviewId, input);
@@ -83,12 +79,12 @@ export async function updateReviewController(req: Request, res: Response, next: 
   }
 }
 
-export async function deleteReviewController(req: Request, res: Response, next: NextFunction) {
+export async function deleteReviewController(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
-    if (!req.user) {
-      throw new AppError("UNAUTHORIZED");
-    }
-
     const reviewId = validateReviewIdParam(req.params.reviewId);
     const result = await reviewService.deleteReview(req.user.id, reviewId);
     res.status(200).json(result);

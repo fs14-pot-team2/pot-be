@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 
 import AppError from "../errors/app-error.js";
 import * as authService from "../services/auth-service.js";
@@ -134,10 +135,8 @@ export function googleSignup(req: Request, res: Response, next: NextFunction) {
   return handleSocialSignup(req, res, next, "GOOGLE", validateGoogleSignup);
 }
 
-export async function linkKakao(req: Request, res: Response, next: NextFunction) {
+export async function linkKakao(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    if (!req.user) throw new AppError("UNAUTHORIZED");
-
     const input = validateKakaoLink(req.body);
     await socialLinkService.connectKakaoAccount(req.user, input);
 
@@ -147,10 +146,8 @@ export async function linkKakao(req: Request, res: Response, next: NextFunction)
   }
 }
 
-export async function linkGoogle(req: Request, res: Response, next: NextFunction) {
+export async function linkGoogle(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    if (!req.user) throw new AppError("UNAUTHORIZED");
-
     const input = validateGoogleLink(req.body);
     await socialLinkService.connectGoogleAccount(req.user, input);
 

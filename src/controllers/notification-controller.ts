@@ -1,4 +1,5 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 import AppError from "../errors/app-error.js";
 import {
   getNotifications,
@@ -10,11 +11,7 @@ import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 import { validateCursorQuery } from "../validators/pagination-validator.js";
 
 // 본인 알림 목록 조회
-export async function getNotificationsController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getNotificationsController(req: AuthenticatedRequest, res: Response) {
   const { cursor, limit } = validateCursorQuery(
     {
       cursor: req.query.cursor,
@@ -30,20 +27,12 @@ export async function getNotificationsController(req: Request, res: Response) {
 }
 
 // 본인 미확인 알림 존재 여부 조회
-export async function hasUnreadNotificationController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function hasUnreadNotificationController(req: AuthenticatedRequest, res: Response) {
   res.status(200).json(await hasUnreadNotification(req.user.id));
 }
 
 // 알림 단건 읽음 처리
-export async function markNotificationAsReadController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function markNotificationAsReadController(req: AuthenticatedRequest, res: Response) {
   const notificationId = parseBigId(req.params.notificationId);
 
   if (notificationId === null) {
@@ -56,11 +45,10 @@ export async function markNotificationAsReadController(req: Request, res: Respon
 }
 
 // 본인 미확인 알림 일괄 읽음 처리
-export async function markAllNotificationsAsReadController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function markAllNotificationsAsReadController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const updatedNotifications = await markAllNotificationsAsRead(req.user.id);
 
   res.status(200).json(updatedNotifications);

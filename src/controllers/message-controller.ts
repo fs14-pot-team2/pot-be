@@ -1,5 +1,5 @@
-import type { Request, Response } from "express";
-import AppError from "../errors/app-error.js";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 import {
   getConversations,
   getMessages,
@@ -17,11 +17,7 @@ import {
 import { validateCursorQuery } from "../validators/pagination-validator.js";
 
 // 대화방 목록 조회
-export async function getConversationsController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getConversationsController(req: AuthenticatedRequest, res: Response) {
   const { cursor, limit } = validateCursorQuery(
     {
       cursor: req.query.cursor,
@@ -37,11 +33,7 @@ export async function getConversationsController(req: Request, res: Response) {
 }
 
 // 쪽지 목록 조회
-export async function getMessagesController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getMessagesController(req: AuthenticatedRequest, res: Response) {
   const otherUserId = validateOtherUserIdParam(req.params.otherUserId);
   const { cursor, limit } = validateCursorQuery(
     {
@@ -57,11 +49,7 @@ export async function getMessagesController(req: Request, res: Response) {
 }
 
 // 쪽지 발송
-export async function sendMessageController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function sendMessageController(req: AuthenticatedRequest, res: Response) {
   const input = validateSendMessageBody(req.body);
   const result = await sendMessage(req.user.id, req.user.role, input);
 
@@ -69,11 +57,7 @@ export async function sendMessageController(req: Request, res: Response) {
 }
 
 // 쪽지 읽음 처리
-export async function readMessagesController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function readMessagesController(req: AuthenticatedRequest, res: Response) {
   const conversationId = validateConversationIdParam(req.params.conversationId);
   await readConversationMessages(req.user.id, conversationId);
 
@@ -81,11 +65,7 @@ export async function readMessagesController(req: Request, res: Response) {
 }
 
 // 전체 미확인 쪽지 존재 여부 조회
-export async function getUnreadStatusController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getUnreadStatusController(req: AuthenticatedRequest, res: Response) {
   const result = await getUnreadStatus(req.user.id);
 
   res.status(200).json(result);

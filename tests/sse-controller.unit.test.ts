@@ -5,7 +5,8 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it, mock } from "node:test";
 
 import express from "express";
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../src/types/authenticated-request.js";
 import jwt from "jsonwebtoken";
 
 import { env } from "../src/config/env.js";
@@ -262,7 +263,7 @@ describe("connectEventsController 타이머", () => {
       headers: { authorization: `Bearer ${token}` },
       user: { id: 401n, role: "OWNER" },
       on: onRequest,
-    } as unknown as Request;
+    } as unknown as AuthenticatedRequest;
 
     const response = {
       get writableEnded() {
