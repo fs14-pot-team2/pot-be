@@ -1,8 +1,8 @@
 import { Router } from "express";
 
 import { issueProfileImageUrlController } from "../controllers/image-controller.js";
-import { authenticate } from "../middlewares/auth-middleware.js";
+import { withAuthentication } from "../middlewares/authenticated-handler.js";
 
 export const imageRouter = Router();
 
-imageRouter.post("/presigned-url", authenticate, issueProfileImageUrlController);
+imageRouter.post("/presigned-url", withAuthentication(issueProfileImageUrlController));
