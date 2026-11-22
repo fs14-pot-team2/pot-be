@@ -1,8 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
-import AppError from "../errors/app-error.js";
 import { addSseClient, removeSseClient } from "../services/sse-service.js";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 
 // 로드밸런서·nginx의 유휴 연결 종료(기본 60초)보다 짧게 유지한다.
 const HEARTBEAT_INTERVAL_MS = 25_000;
@@ -20,11 +20,12 @@ function getMsUntilTokenExpiry(request: Request): number | null {
 }
 
 // 실시간 이벤트 수신 연결 (SSE)
-export function connectEventsController(request: Request, response: Response, next: NextFunction) {
+export function connectEventsController(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction,
+) {
   const user = request.user;
-  if (!user) {
-    return next(new AppError("UNAUTHORIZED"));
-  }
 
   response.set({
     "Content-Type": "text/event-stream; charset=utf-8",

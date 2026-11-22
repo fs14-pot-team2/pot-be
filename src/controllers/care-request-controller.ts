@@ -1,4 +1,5 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 import AppError from "../errors/app-error.js";
 import {
   cancelCareRequestService,
@@ -19,11 +20,7 @@ import {
 } from "../validators/care-request-validator.js";
 
 // 돌봄 요청 생성
-export async function createCareRequestController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function createCareRequestController(req: AuthenticatedRequest, res: Response) {
   const userId = req.user.id;
 
   const careRequestData = validateCreateCareRequest(req.body);
@@ -49,11 +46,7 @@ export async function createCareRequestController(req: Request, res: Response) {
 }
 
 // 팟오너의 활성 돌봄 요청 조회
-export async function getActiveCareRequestController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getActiveCareRequestController(req: AuthenticatedRequest, res: Response) {
   const ownerId = req.user.id;
   const activeCareRequest = await getActiveCareRequest(ownerId);
 
@@ -87,11 +80,7 @@ export async function getActiveCareRequestController(req: Request, res: Response
 }
 
 // 팟오너의 돌봄 요청 수정
-export async function updateCareRequestController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function updateCareRequestController(req: AuthenticatedRequest, res: Response) {
   const ownerId = req.user.id;
   const careRequestId = parseBigId(req.params.careRequestId);
 
@@ -122,11 +111,7 @@ export async function updateCareRequestController(req: Request, res: Response) {
 }
 
 // 팟오너의 돌봄 요청 취소
-export async function cancelCareRequestController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function cancelCareRequestController(req: AuthenticatedRequest, res: Response) {
   const ownerId = req.user.id;
   const careRequestId = parseBigId(req.params.careRequestId);
 
@@ -146,11 +131,7 @@ export async function cancelCareRequestController(req: Request, res: Response) {
 }
 
 // 팟트너의 받은 돌봄 요청 목록 조회
-export async function getReceivedCareRequestsController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getReceivedCareRequestsController(req: AuthenticatedRequest, res: Response) {
   const sitterId = req.user.id;
   const query = validateReceivedCareRequestsQuery(req.query);
   const receivedCareRequests = await getReceivedCareRequests(sitterId, query);
@@ -185,11 +166,7 @@ export async function getReceivedCareRequestsController(req: Request, res: Respo
 }
 
 // 팟오너의 요청한 견적 현황 조회
-export async function getOpenCareRequestQuotesController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getOpenCareRequestQuotesController(req: AuthenticatedRequest, res: Response) {
   const ownerId = req.user.id;
   const careRequestQuoteOverview = await getOpenCareRequestQuotes(ownerId);
 
@@ -197,11 +174,10 @@ export async function getOpenCareRequestQuotesController(req: Request, res: Resp
 }
 
 // 팟오너의 돌봄 요청 이력과 해당 요청에 받은 견적 및 반려 조회
-export async function getCareRequestQuotesHistoryController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getCareRequestQuotesHistoryController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const ownerId = req.user.id;
   const query = validateCareRequestQuotesHistoryQuery(req.query);
   const careRequestQuoteHistory = await getCareRequestQuotesHistoryByOwner(ownerId, query);

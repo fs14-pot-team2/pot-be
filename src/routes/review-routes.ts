@@ -5,7 +5,8 @@ import {
   getWritableReviewsController,
   updateReviewController,
 } from "../controllers/review-controller.js";
-import { authenticate, authorize } from "../middlewares/auth-middleware.js";
+import { authorize } from "../middlewares/auth-middleware.js";
+import { withAuthentication } from "../middlewares/authenticated-handler.js";
 
 export const reviewRouter = Router();
 
@@ -13,15 +14,22 @@ export const reviewRouter = Router();
 // 작성 가능한 리뷰 목록 조회
 reviewRouter.get(
   "/owners/me/reviews/writable",
-  authenticate,
-  authorize("OWNER"),
-  getWritableReviewsController,
+  withAuthentication(getWritableReviewsController, authorize("OWNER")),
 );
 
 // 내가 작성한 리뷰 목록 조회
-reviewRouter.get("/owners/me/reviews", authenticate, authorize("OWNER"), getMyReviewsController);
+reviewRouter.get(
+  "/owners/me/reviews",
+  withAuthentication(getMyReviewsController, authorize("OWNER")),
+);
 // 내가 작성한 리뷰 수정
-reviewRouter.patch("/reviews/:reviewId", authenticate, authorize("OWNER"), updateReviewController);
+reviewRouter.patch(
+  "/reviews/:reviewId",
+  withAuthentication(updateReviewController, authorize("OWNER")),
+);
 
 // 내가 작성한 리뷰 삭제
-reviewRouter.delete("/reviews/:reviewId", authenticate, authorize("OWNER"), deleteReviewController);
+reviewRouter.delete(
+  "/reviews/:reviewId",
+  withAuthentication(deleteReviewController, authorize("OWNER")),
+);

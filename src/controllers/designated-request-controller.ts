@@ -1,4 +1,5 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 import AppError from "../errors/app-error.js";
 import {
   createDesignatedRequest,
@@ -15,11 +16,7 @@ import { serializeDate } from "../utils/serialize-date.js";
 import { validatePagination } from "../validators/pagination-validator.js";
 
 // 팟오너의 지정 요청 생성
-export async function createDesignatedRequestController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function createDesignatedRequestController(req: AuthenticatedRequest, res: Response) {
   const ownerId = req.user.id;
   const careRequestId = parseBigId(req.params.careRequestId);
 
@@ -42,11 +39,7 @@ export async function createDesignatedRequestController(req: Request, res: Respo
 }
 
 // 팟트너의 지정 요청 반려
-export async function rejectDesignatedRequestController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function rejectDesignatedRequestController(req: AuthenticatedRequest, res: Response) {
   const sitterId = req.user.id;
   const designatedRequestId = parseBigId(req.params.designatedRequestId);
 
@@ -73,11 +66,10 @@ export async function rejectDesignatedRequestController(req: Request, res: Respo
 }
 
 // 팟트너의 반려 요청 이력 목록 조회
-export async function getRejectedRequestsBySitterController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getRejectedRequestsBySitterController(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
   const sitterId = req.user.id;
   const { page, pageSize } = validatePagination(req.query.page, req.query.pageSize);
 
@@ -115,11 +107,7 @@ export async function getRejectedRequestsBySitterController(req: Request, res: R
 }
 
 // 팟오너의 반려 사유 조회
-export async function getRejectedRequestReasonController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function getRejectedRequestReasonController(req: AuthenticatedRequest, res: Response) {
   const ownerId = req.user.id;
   const rejectedRequestId = parseBigId(req.params.rejectedRequestId);
 

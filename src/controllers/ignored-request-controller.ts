@@ -1,14 +1,11 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
+import type { AuthenticatedRequest } from "../types/authenticated-request.js";
 import AppError from "../errors/app-error.js";
 import { ignoreCareRequest } from "../services/ignored-request-service.js";
 import { parseBigId, serializeBigInt } from "../utils/bigint.js";
 
 // 팟트너의 공개 돌봄 요청 숨김 처리
-export async function ignoreCareRequestController(req: Request, res: Response) {
-  if (!req.user) {
-    throw new AppError("UNAUTHORIZED");
-  }
-
+export async function ignoreCareRequestController(req: AuthenticatedRequest, res: Response) {
   const sitterId = req.user.id;
   const careRequestId = parseBigId(req.params.careRequestId);
 
