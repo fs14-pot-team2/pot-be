@@ -83,7 +83,7 @@ jobs:
   migration-package:
     name: migration-package
     needs: [quality, integration-test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && vars.POT_DEV_DEPLOY_ENABLED != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
