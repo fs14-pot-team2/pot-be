@@ -285,7 +285,7 @@ jobs:
   migration-package-prod:
     name: migration-package-prod
     needs: [quality, integration-test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.POT_PROD_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
