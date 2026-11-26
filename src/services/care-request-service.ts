@@ -353,12 +353,14 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
     ...new Set([...sitterRegions, ...designatedRegions.map(({ region }) => region)]),
   ];
 
-  if (
-    query.regions.some((region) => !availableRegions.includes(region)) ||
-    (query.regions.length > 0 && query.regions.length >= availableRegions.length)
-  ) {
-    throw new AppError("INVALID_REGION");
-  }
+  const validRegions = query.regions.filter((region) => availableRegions.includes(region));
+
+  const appliedRegions = validRegions.length === availableRegions.length ? [] : validRegions;
+
+  // 지역 보정은 기존 선택값을 제거하기만 하므로 개수 비교만으로 보정 여부 판단
+  const wasRegionFilterAdjusted = query.regions.length !== appliedRegions.length;
+
+  const page = wasRegionFilterAdjusted ? 1 : query.page;
 
   const where: Prisma.CareRequestWhereInput = {
     status: CareRequestStatus.OPEN,
@@ -387,8 +389,8 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
     ...(query.serviceTypes.length > 0 && {
       serviceType: { in: query.serviceTypes },
     }),
-    ...(query.regions.length > 0 && {
-      region: { in: query.regions },
+    ...(appliedRegions.length > 0 && {
+      region: { in: appliedRegions },
     }),
     ...(query.keyword && {
       owner: {
@@ -402,7 +404,7 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
       ? [{ startDate: "asc" }, { id: "desc" }]
       : [{ createdAt: "desc" }, { id: "desc" }];
 
-  const skip = (query.page - 1) * query.pageSize;
+  const skip = (page - 1) * query.pageSize;
 
   if (!Number.isSafeInteger(skip)) {
     throw new AppError("INVALID_PAGE_PARAMETER");
@@ -416,7 +418,7 @@ export async function getReceivedCareRequests(sitterId: bigint, query: ReceivedC
   return {
     items,
     availableRegions,
-    page: query.page,
+    page,
     pageSize: query.pageSize,
     totalCount,
     totalPages: Math.ceil(totalCount / query.pageSize),
