@@ -327,9 +327,9 @@ describe("돌봄 일정 알림 SSE 전달", () => {
       await assertNotificationUnchanged(fixture.notification.id, null);
     });
 
-    // 비정상 HTTP 응답 이후 재시도에 성공하면 추가 전송하지 않음
-    it("비정상 HTTP 응답 후 204를 받으면 재시도를 중단한다", async (t) => {
-      const fixture = await createTestNotification();
+    // 유효한 종료 임박 알림의 비정상 HTTP 응답 이후 재시도에 성공하면 추가 전송하지 않음
+    it("유효한 종료 임박 알림의 비정상 HTTP 응답 후 204를 받으면 재시도를 중단한다", async (t) => {
+      const fixture = await createTestNotification({ event: "ENDING" });
       const requests = mockHttpsRequests(t, [{ statusCode: 500 }, { statusCode: 204 }]);
       const errors: unknown[][] = [];
 
@@ -660,6 +660,36 @@ describe("돌봄 일정 알림 SSE 전달", () => {
       });
 
       assert.deepEqual(savedRequest.endDate, dateOffset(2));
+      await assertNotificationUnchanged(fixture.notification.id, null);
+    });
+
+    // 종료 임박 알림 재시도 전에 돌봄 기간이 2일로 변경되면 추가 HTTP 전송 중단
+    it("재시도 전에 돌봄 기간이 2일로 변경된 상태면 추가 전송을 중단한다", async (t) => {
+      const fixture = await createTestNotification({ event: "ENDING" });
+
+      const requests = mockHttpsRequests(t, [
+        {
+          statusCode: 500,
+          beforeResponse: async () => {
+            await prisma.careRequest.update({
+              where: { id: fixture.careRequestId },
+              data: { startDate: dateOffset(0) },
+            });
+          },
+        },
+      ]);
+
+      await deliverCareScheduleNotificationWithRetry(fixture.notification);
+
+      assert.equal(requests.length, 1);
+
+      const savedRequest = await prisma.careRequest.findUniqueOrThrow({
+        where: { id: fixture.careRequestId },
+      });
+
+      assert.deepEqual(savedRequest.startDate, dateOffset(0));
+      assert.deepEqual(savedRequest.endDate, dateOffset(1));
+
       await assertNotificationUnchanged(fixture.notification.id, null);
     });
 
