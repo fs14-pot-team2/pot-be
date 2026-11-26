@@ -413,6 +413,7 @@ export function findCareRequestForReviewNotification(careRequestId: bigint, db: 
 export function findCareRequestsEligibleForCareScheduleNotification(
   date: Date,
   dateField: "startDate" | "endDate",
+  startDateBefore: Date | null,
   db: DbClient = prisma,
 ) {
   const isCareStarting = dateField === "startDate";
@@ -430,6 +431,9 @@ export function findCareRequestsEligibleForCareScheduleNotification(
       status: CareRequestStatus.MATCHED,
       confirmedQuoteId: { not: null },
       [dateField]: date,
+      ...(startDateBefore !== null && {
+        startDate: { lt: startDateBefore },
+      }),
       OR: [
         { notifications: { none: { type: ownerNotificationType } } },
         { notifications: { none: { type: sitterNotificationType } } },
