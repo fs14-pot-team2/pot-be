@@ -1,8 +1,8 @@
 import { ServiceType, Region } from "../generated/prisma/enums.js";
 import AppError from "../errors/app-error.js";
-import { parseBigId } from "../utils/bigint.js";
 import { getTodayInKst } from "../utils/kst-date.js";
 import { toRegion } from "../utils/region.js";
+import { containsNullByte } from "../utils/db-string-validation.js";
 import { validateCursorQuery, validatePagination } from "./pagination-validator.js";
 
 export interface CreateCareRequestInput {
@@ -33,6 +33,16 @@ function requireString(value: unknown): string {
   return value;
 }
 
+function validateAddress(value: unknown): string {
+  const address = requireString(value);
+
+  if (containsNullByte(address)) {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  return address;
+}
+
 function validateZonecode(value: unknown): string {
   if (typeof value !== "string" || !ZONECODE_PATTERN.test(value)) {
     throw new AppError("INVALID_REQUEST");
@@ -47,6 +57,7 @@ function validateZonecode(value: unknown): string {
  * - 빈 문자열, 공백만 있는 문자열: null 반환
  * - 유효한 문자열: 원본 값 유지
  * - 문자열이 아닌 값(숫자, 배열, 객체 등): INVALID_REQUEST
+ * - NUL 문자가 포함된 문자열: INVALID_REQUEST
  *
  * 생성 요청 기준으로 수정 시 필드 생략은 기존 값 유지로 구분함.
  */
@@ -55,7 +66,7 @@ function optionalString(value: unknown): string | null {
     return null;
   }
 
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || containsNullByte(value)) {
     throw new AppError("INVALID_REQUEST");
   }
 
@@ -158,7 +169,7 @@ export function validateUpdateCareRequest(body: unknown): UpdateCareRequestInput
   }
 
   if ("address" in body) {
-    careRequestData.address = requireString(body.address);
+    careRequestData.address = validateAddress(body.address);
   }
 
   if ("detailAddress" in body) {
@@ -186,7 +197,7 @@ export function validateCreateCareRequest(body: unknown): CreateCareRequestInput
   }
 
   const zonecode = validateZonecode(body.zonecode);
-  const address = requireString(body.address);
+  const address = validateAddress(body.address);
   const detailAddress = optionalString(body.detailAddress);
   const sido = requireString(body.sido);
   const sigungu = optionalString(body.sigungu);
@@ -272,10 +283,9 @@ export function validateReceivedCareRequestsQuery(
     regions = [...new Set(values)] as Region[];
   }
 
-  // PostgreSQL은 문자열에 NUL 문자를 허용하지 않으므로 DB 조회 전에 거부
   if (
     query.keyword !== undefined &&
-    (typeof query.keyword !== "string" || query.keyword.includes("\0"))
+    (typeof query.keyword !== "string" || containsNullByte(query.keyword))
   ) {
     throw new AppError("INVALID_REQUEST");
   }

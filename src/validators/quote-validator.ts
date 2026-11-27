@@ -1,4 +1,5 @@
 import AppError from "../errors/app-error.js";
+import { containsNullByte } from "../utils/db-string-validation.js";
 import { validatePagination } from "./pagination-validator.js";
 
 export interface CreateQuoteInput {
@@ -17,7 +18,7 @@ function validateQuotePrice(value: unknown): number {
 }
 
 function validateQuoteComment(value: unknown): string {
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || containsNullByte(value)) {
     throw new AppError("INVALID_QUOTE_COMMENT");
   }
 
