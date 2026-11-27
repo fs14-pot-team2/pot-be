@@ -9,7 +9,7 @@ const REAUTH_COOKIE_NAME = "reauthToken";
 // FE에서 Next.js rewrites 프록시(same-origin)로 호출하므로 sameSite는 lax 유지 (발급/삭제 옵션은 항상 동일해야 함)
 const baseOptions = () => ({
   httpOnly: true,
-  secure: env.isProduction,
+  secure: env.cookieSecure,
   sameSite: "lax" as const,
 });
 

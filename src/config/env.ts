@@ -11,7 +11,7 @@ const requireEnv = (key: string): string => {
 export const env = {
   // 서버 실행 환경 설정 (포트, 운영 환경 여부, 허용할 CORS 출처)
   port: Number(process.env.PORT ?? 4000),
-  isProduction: process.env.NODE_ENV === "production",
+  cookieSecure: process.env.NODE_ENV === "production" || process.env.COOKIE_SECURE === "true",
   corsOrigins: (process.env.CORS_ORIGINS ?? "")
     .split(",")
     .map((origin) => origin.trim())
