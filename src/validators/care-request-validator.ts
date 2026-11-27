@@ -272,7 +272,11 @@ export function validateReceivedCareRequestsQuery(
     regions = [...new Set(values)] as Region[];
   }
 
-  if (query.keyword !== undefined && typeof query.keyword !== "string") {
+  // PostgreSQL은 문자열에 NUL 문자를 허용하지 않으므로 DB 조회 전에 거부
+  if (
+    query.keyword !== undefined &&
+    (typeof query.keyword !== "string" || query.keyword.includes("\0"))
+  ) {
     throw new AppError("INVALID_REQUEST");
   }
 
