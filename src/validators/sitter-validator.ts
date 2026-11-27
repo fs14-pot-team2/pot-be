@@ -5,6 +5,7 @@ import { SITTER_SORTS, type SitterListQuery, type SitterSort } from "../types/si
 import { parseBigId } from "../utils/bigint.js";
 
 import { validatePagination } from "./pagination-validator.js";
+import { containsNullByte } from "../utils/db-string-validation.js";
 
 // 쿼리 파라미터별 최대 선택 개수 (API 명세 기준)
 // regions: 17개 전체 선택은 '전체'이므로 파라미터를 생략해 최대 16개
@@ -46,7 +47,7 @@ export function validateSitterListQuery(query: Record<string, unknown>): SitterL
   let keyword: string | undefined;
   if (query.keyword !== undefined) {
     // PostgreSQL은 문자열에 NUL 문자를 허용하지 않으므로 DB 조회 전에 거부
-    if (typeof query.keyword !== "string" || query.keyword.includes("\0")) {
+    if (typeof query.keyword !== "string" || containsNullByte(query.keyword)) {
       throw new AppError("INVALID_REQUEST");
     }
     keyword = query.keyword.trim() || undefined;
