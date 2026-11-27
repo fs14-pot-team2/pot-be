@@ -27,7 +27,7 @@ export function validatePassword(password: unknown): string {
 }
 
 export function validateSignup(body: unknown): SignupInput {
-  if (typeof body !== "object" || body === null) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new AppError("INVALID_REQUEST");
   }
 
@@ -53,7 +53,7 @@ export function validateSignup(body: unknown): SignupInput {
 }
 
 export function validateLogin(body: unknown): LoginInput {
-  if (typeof body !== "object" || body === null) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new AppError("INVALID_REQUEST");
   }
 
