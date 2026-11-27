@@ -392,34 +392,58 @@ describe("돌봄 일정 알림 생성", () => {
       assert.equal(findCreatedNotifications(result, fixture.careRequestId).length, 0);
     });
 
-    // 시작 알림과 종료 임박 알림이 같은 요청에서 독립적으로 생성되는지 확인
-    it("시작 알림과 종료 임박 알림은 서로 독립적으로 생성한다", async () => {
-      const fixture = await createTestRequest({
+    // 돌봄 기간별 종료 임박 알림 생성 조건 및 기존 시작 알림 생성 조건 유지 확인
+    it("1~2일 돌봄 일정은 시작 알림만 생성하고 3일 일정은 종료 임박 알림을 생성한다", async () => {
+      const oneDayUpcoming = await createTestRequest({
+        startOffsetDays: 1,
+        endOffsetDays: 1,
+      });
+
+      const oneDayStarting = await createTestRequest({
+        startOffsetDays: 0,
+        endOffsetDays: 0,
+      });
+
+      const twoDayStarting = await createTestRequest({
         startOffsetDays: 0,
         endOffsetDays: 1,
       });
 
+      const threeDayEnding = await createTestRequest({
+        startOffsetDays: -1,
+        endOffsetDays: 1,
+      });
+
       const result = await createCareScheduleNotifications();
-      const notifications = await findCareScheduleNotifications(fixture.careRequestId);
 
-      assert.equal(notifications.length, 4);
+      assert.equal((await findCareScheduleNotifications(oneDayUpcoming.careRequestId)).length, 0);
+      assert.equal(findCreatedNotifications(result, oneDayUpcoming.careRequestId).length, 0);
 
+      for (const fixture of [oneDayStarting, twoDayStarting]) {
+        const notifications = await findCareScheduleNotifications(fixture.careRequestId);
+        const created = findCreatedNotifications(result, fixture.careRequestId);
+
+        assert.equal(notifications.length, 2);
+        assert.deepEqual(
+          new Set(notifications.map((notification) => notification.type)),
+          new Set(["OWNER_CARE_STARTED", "SITTER_CARE_STARTED"]),
+        );
+
+        assert.equal(created.length, 2);
+        assert.ok(created.every((notification) => notification.event === "STARTED"));
+      }
+
+      const notifications = await findCareScheduleNotifications(threeDayEnding.careRequestId);
+      const created = findCreatedNotifications(result, threeDayEnding.careRequestId);
+
+      assert.equal(notifications.length, 2);
       assert.deepEqual(
         new Set(notifications.map((notification) => notification.type)),
-        new Set(careScheduleTypes),
+        new Set(["OWNER_CARE_ENDING", "SITTER_CARE_ENDING"]),
       );
 
-      const created = findCreatedNotifications(result, fixture.careRequestId);
-
-      assert.equal(created.length, 4);
-      assert.equal(created.filter((notification) => notification.event === "STARTED").length, 2);
-      assert.equal(created.filter((notification) => notification.event === "ENDING").length, 2);
-
-      const repeatResult = await createCareScheduleNotifications();
-
-      assert.equal((await findCareScheduleNotifications(fixture.careRequestId)).length, 4);
-
-      assert.equal(findCreatedNotifications(repeatResult, fixture.careRequestId).length, 0);
+      assert.equal(created.length, 2);
+      assert.ok(created.every((notification) => notification.event === "ENDING"));
     });
   });
 
@@ -509,6 +533,39 @@ describe("돌봄 일정 알림 생성", () => {
       const result = await createCareScheduleNotifications(runTransaction);
 
       assert.equal(statusChanged, true);
+
+      assert.equal((await findCareScheduleNotifications(fixture.careRequestId)).length, 0);
+
+      assert.equal(findCreatedNotifications(result, fixture.careRequestId).length, 0);
+    });
+
+    // 후보 조회 이후 돌봄 기간이 2일로 변경되면 종료 임박 알림 저장 대상에서 제외
+    it("후보 조회 이후 돌봄 기간이 2일로 변경된 상태면 종료 임박 알림을 생성하지 않는다", async () => {
+      await createCareScheduleNotifications();
+
+      const fixture = await createTestRequest({
+        startOffsetDays: -1,
+        endOffsetDays: 1,
+      });
+
+      let scheduleChanged = false;
+
+      const runTransaction: TransactionRunner = async (callback) => {
+        if (!scheduleChanged) {
+          await prisma.careRequest.update({
+            where: { id: fixture.careRequestId },
+            data: { startDate: dateOffset(0) },
+          });
+
+          scheduleChanged = true;
+        }
+
+        return prisma.$transaction(callback);
+      };
+
+      const result = await createCareScheduleNotifications(runTransaction);
+
+      assert.equal(scheduleChanged, true);
 
       assert.equal((await findCareScheduleNotifications(fixture.careRequestId)).length, 0);
 

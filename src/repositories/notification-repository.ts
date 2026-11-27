@@ -67,7 +67,7 @@ export function findAnyUnreadNotification(recipientId: bigint, db: DbClient = pr
   });
 }
 
-// 알림 단건 읽음 처리를 위한 조회
+// 알림 단건 읽음 처리 및 관련 상태 확인을 위한 조회
 export function findNotificationForRead(notificationId: bigint, db: DbClient = prisma) {
   return db.notification.findUnique({
     where: { id: notificationId },
@@ -75,6 +75,9 @@ export function findNotificationForRead(notificationId: bigint, db: DbClient = p
       id: true,
       recipientId: true,
       readAt: true,
+      type: true,
+      careRequestId: true,
+      designatedRequestId: true,
     },
   });
 }

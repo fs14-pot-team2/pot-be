@@ -1,6 +1,6 @@
 import { CareRequestStatus } from "../generated/prisma/enums.js";
 import { findCareRequest } from "../repositories/care-request-repository.js";
-import { getTodayInKst } from "../utils/kst-date.js";
+import { getTodayInKst, isBeforeTodayInKst } from "../utils/kst-date.js";
 import { sendInternalSseNotification } from "./internal-sse-http-service.js";
 
 const MAX_SEND_COUNT = 3;
@@ -141,7 +141,10 @@ export async function deliverCareScheduleNotificationWithRetry(
         const careDate =
           notification.event === "STARTED" ? careRequest.startDate : careRequest.endDate;
 
-        if (careDate.getTime() !== expectedDate.getTime()) {
+        if (
+          careDate.getTime() !== expectedDate.getTime() ||
+          (notification.event === "ENDING" && !isBeforeTodayInKst(careRequest.startDate))
+        ) {
           return false;
         }
       }
