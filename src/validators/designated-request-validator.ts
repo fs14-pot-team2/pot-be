@@ -1,5 +1,6 @@
 import AppError from "../errors/app-error.js";
 import { parseBigId } from "../utils/bigint.js";
+import { containsNullByte } from "../utils/db-string-validation.js";
 
 export function validateCreateDesignatedRequest(body: unknown): bigint {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -27,7 +28,7 @@ export function validateRejectDesignatedRequest(body: unknown): string {
     throw new AppError("INVALID_REQUEST");
   }
 
-  if (typeof rejectionReason !== "string") {
+  if (typeof rejectionReason !== "string" || containsNullByte(rejectionReason)) {
     throw new AppError("INVALID_REJECTION_REASON");
   }
 
