@@ -30,6 +30,11 @@ const SORT_COMPARATORS: Record<SitterSort, (x: SortAggregate, y: SortAggregate) 
 
 export async function getSitterList(query: SitterListQuery) {
   const { page, pageSize, sort, ...filter } = query;
+  const skip = (page - 1) * pageSize;
+
+  if (!Number.isSafeInteger(skip)) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
 
   const userIds = await findSitterUserIdsByFilter(filter);
   const aggregates = await getSitterAggregates(userIds);
@@ -42,7 +47,7 @@ export async function getSitterList(query: SitterListQuery) {
   );
 
   const totalCount = sortedIds.length;
-  const pageIds = sortedIds.slice((page - 1) * pageSize, page * pageSize);
+  const pageIds = sortedIds.slice(skip, skip + pageSize);
 
   const profiles = await findSitterListByUserIds(pageIds);
   const profileById = new Map(profiles.map((profile) => [profile.userId, profile]));

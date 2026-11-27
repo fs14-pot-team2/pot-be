@@ -436,5 +436,14 @@ describe("팟트너 찾기 목록 조회", () => {
 
       assert.deepEqual(parsed.regions, ["SEOUL", "BUSAN"]);
     });
+
+    it("skip이 안전 정수를 넘으면 INVALID_PAGE_PARAMETER를 반환한다", async () => {
+      const query = validateSitterListQuery({
+        page: String(Number.MAX_SAFE_INTEGER),
+        pageSize: "100",
+      });
+
+      await assert.rejects(() => getSitterList(query), assertAppError("INVALID_PAGE_PARAMETER"));
+    });
   });
 });
