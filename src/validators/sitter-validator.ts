@@ -45,7 +45,10 @@ function parseEnumList<T extends string>(
 export function validateSitterListQuery(query: Record<string, unknown>): SitterListQuery {
   let keyword: string | undefined;
   if (query.keyword !== undefined) {
-    if (typeof query.keyword !== "string") throw new AppError("INVALID_REQUEST");
+    // PostgreSQL은 문자열에 NUL 문자를 허용하지 않으므로 DB 조회 전에 거부
+    if (typeof query.keyword !== "string" || query.keyword.includes("\0")) {
+      throw new AppError("INVALID_REQUEST");
+    }
     keyword = query.keyword.trim() || undefined;
   }
 
