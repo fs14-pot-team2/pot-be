@@ -15,16 +15,20 @@ const OWNER_PROFILE_SELECT = {
 } as const;
 
 // 팟오너 프로필 조회 (User 1 : OwnerProfile 1, userId UNIQUE)
-export const findOwnerProfileByUserId = (userId: bigint) => {
-  return prisma.ownerProfile.findUnique({
+export const findOwnerProfileByUserId = (userId: bigint, db: DbClient = prisma) => {
+  return db.ownerProfile.findUnique({
     where: { userId },
     select: OWNER_PROFILE_SELECT,
   });
 };
 
 // 팟오너 프로필 수정
-export const updateOwnerProfileByUserId = (userId: bigint, data: UpdateOwnerProfileInput) => {
-  return prisma.ownerProfile.update({
+export const updateOwnerProfileByUserId = (
+  userId: bigint,
+  data: UpdateOwnerProfileInput,
+  db: DbClient = prisma,
+) => {
+  return db.ownerProfile.update({
     where: { userId },
     data,
     select: OWNER_PROFILE_SELECT,
