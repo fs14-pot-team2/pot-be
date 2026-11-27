@@ -2,6 +2,7 @@ import { env } from "./config/env.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import AppError from "./errors/app-error.js";
 import { careRequestRouter } from "./routes/care-request-routes.js";
 import authRoutes from "./routes/auth-routes.js";
 import { profileRouter } from "./routes/profile-routes.js";
@@ -38,5 +39,10 @@ app.use(messageRouter);
 app.use("/notifications", notificationRouter);
 app.use("/events", sseRouter);
 app.use("/internal/sse", internalSseRouter);
+
+// 미등록 API 경로 공통 처리
+app.use((_request, _response, next) => {
+  next(new AppError("RESOURCE_NOT_FOUND"));
+});
 
 app.use(errorMiddleware);
