@@ -11,6 +11,22 @@ export const errorMiddleware: ErrorRequestHandler = (error: unknown, _request, r
     return;
   }
 
+  if (
+    error instanceof SyntaxError &&
+    "type" in error &&
+    error.type === "entity.parse.failed" &&
+    "status" in error &&
+    error.status === 400
+  ) {
+    const definition = ERROR_DEFINITIONS.INVALID_REQUEST;
+
+    response.status(definition.statusCode).json({
+      code: definition.code,
+      message: definition.message,
+    });
+    return;
+  }
+
   console.error(error);
 
   const definition = ERROR_DEFINITIONS.INTERNAL_SERVER_ERROR;
