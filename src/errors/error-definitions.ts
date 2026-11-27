@@ -164,11 +164,6 @@ export const ERROR_DEFINITIONS = {
     message: "올바르지 않은 서비스 유형입니다.",
     statusCode: 400,
   },
-  SERVICE_TYPE_ALREADY_EXISTS: {
-    code: "SERVICE_TYPE_ALREADY_EXISTS",
-    message: "이미 등록된 서비스 유형입니다.",
-    statusCode: 409,
-  },
   TOO_MANY_SERVICE_TYPES: {
     code: "TOO_MANY_SERVICE_TYPES",
     message: "서비스 유형은 최대 2개까지 선택할 수 있습니다.",
@@ -183,11 +178,6 @@ export const ERROR_DEFINITIONS = {
     code: "TOO_MANY_SERVICE_REGIONS",
     message: "서비스 지역은 최대 17개까지 선택할 수 있습니다.",
     statusCode: 400,
-  },
-  SERVICE_REGION_ALREADY_EXISTS: {
-    code: "SERVICE_REGION_ALREADY_EXISTS",
-    message: "이미 등록된 서비스 지역입니다.",
-    statusCode: 409,
   },
   SITTER_PROFILE_INCONSISTENT: {
     code: "SITTER_PROFILE_INCONSISTENT",
