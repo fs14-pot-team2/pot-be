@@ -107,7 +107,6 @@ export function findQuoteDetail(quoteId: bigint, db: DbClient = prisma) {
           serviceType: true,
           startDate: true,
           endDate: true,
-          region: true,
           sido: true,
           sigungu: true,
           bname: true,
