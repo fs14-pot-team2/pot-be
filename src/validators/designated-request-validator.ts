@@ -7,13 +7,19 @@ export function validateCreateDesignatedRequest(body: unknown): bigint {
     throw new AppError("INVALID_REQUEST");
   }
 
-  const sitterId = parseBigId((body as Record<string, unknown>).sitterId);
+  const { sitterId } = body as Record<string, unknown>;
 
-  if (sitterId === null) {
+  if (sitterId === undefined) {
     throw new AppError("INVALID_REQUEST");
   }
 
-  return sitterId;
+  const parsedSitterId = parseBigId(sitterId);
+
+  if (parsedSitterId === null) {
+    throw new AppError("INVALID_ID");
+  }
+
+  return parsedSitterId;
 }
 
 // 지정 요청 반려 사유 검증
