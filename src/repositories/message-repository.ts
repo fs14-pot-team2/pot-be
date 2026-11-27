@@ -35,6 +35,22 @@ export function findConversationById(conversationId: bigint, db: DbClient = pris
   });
 }
 
+// 대화방 목록 커서 확인용 (본인이 참여한 대화방만)
+export function findConversationCursor(userId: bigint, conversationId: bigint) {
+  return prisma.conversation.findFirst({
+    where: { id: conversationId, ...participantWhere(userId) },
+    select: { id: true },
+  });
+}
+
+// 쪽지 목록 커서 확인용 (현재 대화방의 쪽지만)
+export function findMessageCursor(conversationId: bigint, messageId: bigint) {
+  return prisma.message.findFirst({
+    where: { id: messageId, conversationId },
+    select: { id: true },
+  });
+}
+
 // 대화방 목록 (최근 쪽지 순, 같은 시각이면 id 내림차순). take는 limit + 1을 넘긴다.
 export function findConversationsByUserId(userId: bigint, cursor: bigint | null, take: number) {
   return prisma.conversation.findMany({

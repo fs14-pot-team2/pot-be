@@ -6,7 +6,9 @@ import {
   existsUnreadMessage,
   findConversationById,
   findConversationByPair,
+  findConversationCursor,
   findConversationsByUserId,
+  findMessageCursor,
   findMessageReceiverById,
   findMessagesByConversationId,
   findUnreadConversationIds,
@@ -62,6 +64,10 @@ function resolvePair(userId: bigint, userRole: UserRole, otherUserId: bigint) {
 }
 
 export async function getConversations(userId: bigint, cursor: bigint | null, limit: number) {
+  if (cursor !== null && !(await findConversationCursor(userId, cursor))) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
+  }
+
   const rows = await findConversationsByUserId(userId, cursor, limit + 1);
 
   const hasNextPage = rows.length > limit;
@@ -120,7 +126,14 @@ export async function getMessages(
 
   // 대화방이 없으면 에러 없이 빈 목록 (외부 진입 시 "대화를 시작해보세요" 안내용)
   if (!conversation) {
+    if (cursor !== null) {
+      throw new AppError("INVALID_PAGE_PARAMETER");
+    }
     return { conversationId: null, items: [], nextCursor: null, hasNextPage: false };
+  }
+
+  if (cursor !== null && !(await findMessageCursor(conversation.id, cursor))) {
+    throw new AppError("INVALID_PAGE_PARAMETER");
   }
 
   const rows = await findMessagesByConversationId(conversation.id, cursor, limit + 1);

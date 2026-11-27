@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 
 import { prisma } from "../src/config/prisma.js";
 import AppError from "../src/errors/app-error.js";
-import { getMessages } from "../src/services/message-service.js";
+import { getConversations, getMessages } from "../src/services/message-service.js";
 import type { UserRole } from "../src/types/auth.js";
 
 type MessagePage = Awaited<ReturnType<typeof getMessages>>;
@@ -358,6 +358,74 @@ describe("쪽지 목록 조회", () => {
       assert.deepEqual(
         pages.flatMap((page) => toIds(page.items)),
         [messageIds[2], messageIds[1], messageIds[0]],
+      );
+    });
+  });
+
+  describe("커서 유효성 검증", () => {
+    it("쪽지 목록은 없는 커서와 다른 대화방의 커서를 거부한다", async () => {
+      const ownerId = await createUser("OWNER");
+      const sitterId = await createUser("SITTER");
+      const otherSitterId = await createUser("SITTER");
+      await createConversation(ownerId, sitterId, buildMessages(ownerId, sitterId, 2));
+      const other = await createConversation(
+        ownerId,
+        otherSitterId,
+        buildMessages(ownerId, otherSitterId, 2),
+      );
+
+      for (const cursor of [9_000_000_000n, other.messageIds[1]]) {
+        await assert.rejects(
+          getMessages(ownerId, "OWNER", sitterId, cursor, 8),
+          assertAppError("INVALID_PAGE_PARAMETER", 400),
+        );
+      }
+    });
+
+    it("대화방이 없는데 커서를 전달하면 거부한다", async () => {
+      const ownerId = await createUser("OWNER");
+      const sitterId = await createUser("SITTER");
+
+      await assert.rejects(
+        getMessages(ownerId, "OWNER", sitterId, 9_000_000_000n, 8),
+        assertAppError("INVALID_PAGE_PARAMETER", 400),
+      );
+    });
+
+    it("대화방 목록은 없는 커서와 참여하지 않은 대화방의 커서를 거부한다", async () => {
+      const ownerId = await createUser("OWNER");
+      const otherOwnerId = await createUser("OWNER");
+      const sitterId = await createUser("SITTER");
+      const other = await createConversation(otherOwnerId, sitterId, []);
+
+      for (const cursor of [9_000_000_000n, other.conversationId]) {
+        await assert.rejects(
+          getConversations(ownerId, cursor, 8),
+          assertAppError("INVALID_PAGE_PARAMETER", 400),
+        );
+      }
+    });
+
+    it("대화방 목록은 본인 대화방 커서의 다음 항목을 반환한다", async () => {
+      const ownerId = await createUser("OWNER");
+      const sitterId = await createUser("SITTER");
+      const otherSitterId = await createUser("SITTER");
+      const older = await createConversation(
+        ownerId,
+        sitterId,
+        buildMessages(ownerId, sitterId, 1),
+      );
+      const newer = await createConversation(
+        ownerId,
+        otherSitterId,
+        buildMessages(ownerId, otherSitterId, 2),
+      );
+
+      const result = await getConversations(ownerId, newer.conversationId, 8);
+
+      assert.deepEqual(
+        result.items.map((item) => item.conversationId),
+        [older.conversationId],
       );
     });
   });
