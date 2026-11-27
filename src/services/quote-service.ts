@@ -446,9 +446,9 @@ export async function confirmQuoteService(
 
 /*
  * 견적 조회 및 주소 공개 조건
- * - OPEN: 요청자 본인(전체 주소), 서비스 지역에 해당하거나 지정 요청을 받은 팟트너(일부 주소)
- * - MATCHED: 요청자 본인(전체 주소), 해당 요청 견적 제출자(최종 매칭 시 전체 주소, 미매칭 시 일부 주소)
- * - EXPIRED: 요청자 본인(전체 주소), 해당 요청 견적 제출자(일부 주소)
+ * - OPEN: 요청자 본인(전체 주소), 해당 견적 작성자(일부 주소)
+ * - MATCHED: 요청자 본인(전체 주소), 해당 견적 작성자(확정 시 전체 주소, 미확정 시 일부 주소)
+ * - EXPIRED: 요청자 본인(전체 주소), 해당 견적 작성자(일부 주소)
  * - CANCELED: 모든 사용자 조회 불가
  * - 전체 주소: sido, sigungu, bname, zonecode, address, detailAddress
  * - 일부 주소: sido, sigungu, bname만 공개 / zonecode, address, detailAddress는 null
@@ -467,37 +467,19 @@ export async function getQuoteDetail(quoteId: bigint, user: AuthUser) {
     throw new AppError("QUOTE_ACCESS_FORBIDDEN");
   }
 
-  let canViewFullAddress = false;
-
   if (user.role === "OWNER") {
     if (careRequest.ownerId !== user.id) {
       throw new AppError("QUOTE_ACCESS_FORBIDDEN");
     }
-
-    canViewFullAddress = true;
   } else {
-    if (careRequest.status === "OPEN") {
-      const isDesignatedSitter = careRequest.designatedRequests.some(
-        (designatedRequest) => designatedRequest.sitterId === user.id,
-      );
-
-      const sitterProfile = await findSitterProfileWithRegions(user.id);
-      const isServiceRegion =
-        sitterProfile?.sitterServiceRegions.some(({ region }) => region === careRequest.region) ??
-        false;
-
-      if (!isDesignatedSitter && !isServiceRegion) {
-        throw new AppError("QUOTE_ACCESS_FORBIDDEN");
-      }
-    } else {
-      if (quote.sitterId !== user.id) {
-        throw new AppError("QUOTE_ACCESS_FORBIDDEN");
-      }
-
-      canViewFullAddress =
-        careRequest.status === "MATCHED" && careRequest.confirmedQuoteId === quote.id;
+    if (quote.sitterId !== user.id) {
+      throw new AppError("QUOTE_ACCESS_FORBIDDEN");
     }
   }
+
+  const canViewFullAddress =
+    user.role === "OWNER" ||
+    (careRequest.status === "MATCHED" && careRequest.confirmedQuoteId === quote.id);
 
   const designatedRequestId =
     careRequest.designatedRequests.find(
