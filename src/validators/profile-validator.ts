@@ -150,7 +150,7 @@ export function validateSitterServiceTypes(value: unknown): ServiceType[] {
     throw new AppError("TOO_MANY_SERVICE_TYPES");
   }
   if (new Set(value).size !== value.length) {
-    throw new AppError("SERVICE_TYPE_ALREADY_EXISTS");
+    throw new AppError("INVALID_SERVICE_TYPE");
   }
   return value;
 }
@@ -164,7 +164,7 @@ export function validateServiceRegions(value: unknown): Region[] {
     throw new AppError("TOO_MANY_SERVICE_REGIONS");
   }
   if (new Set(value).size !== value.length) {
-    throw new AppError("SERVICE_REGION_ALREADY_EXISTS");
+    throw new AppError("INVALID_REGION");
   }
   return value;
 }
