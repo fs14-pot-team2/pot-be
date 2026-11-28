@@ -1,5 +1,6 @@
 import AppError from "../errors/app-error.js";
 import { isUserRole, type UserRole } from "../types/auth.js";
+import { containsNullByte } from "../utils/db-string-validation.js";
 
 export interface SignupInput {
   email: string;
@@ -33,7 +34,7 @@ export function validateSignup(body: unknown): SignupInput {
 
   const { email, password, nickname, role } = body as Record<string, unknown>;
 
-  if (typeof email !== "string" || !EMAIL_REGEX.test(email)) {
+  if (typeof email !== "string" || containsNullByte(email) || !EMAIL_REGEX.test(email)) {
     throw new AppError("INVALID_EMAIL_FORMAT");
   }
   if (typeof nickname !== "string" || !NICKNAME_REGEX.test(nickname)) {
@@ -59,7 +60,7 @@ export function validateLogin(body: unknown): LoginInput {
 
   const { email, password, role } = body as Record<string, unknown>;
 
-  if (typeof email !== "string" || !EMAIL_REGEX.test(email)) {
+  if (typeof email !== "string" || containsNullByte(email) || !EMAIL_REGEX.test(email)) {
     throw new AppError("INVALID_EMAIL_FORMAT");
   }
   if (typeof password !== "string" || password.length === 0) {

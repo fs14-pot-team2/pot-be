@@ -7,6 +7,7 @@ import type {
   UpdateSitterProfileInput,
 } from "../types/profile.js";
 import { profileImageKeyPrefix, type ProfileImageRole } from "../utils/profile-image.js";
+import { containsNullByte } from "../utils/db-string-validation.js";
 
 const MAX_SERVICE_TYPES = 2;
 const MAX_PROFILE_IMAGE_URL_LENGTH = 2048;
@@ -39,7 +40,11 @@ export function validateProfileImageUrl(value: unknown, owner: ProfileImageOwner
   if (value === null) {
     return null;
   }
-  if (typeof value !== "string" || value.length > MAX_PROFILE_IMAGE_URL_LENGTH) {
+  if (
+    typeof value !== "string" ||
+    containsNullByte(value) ||
+    value.length > MAX_PROFILE_IMAGE_URL_LENGTH
+  ) {
     throw new AppError("INVALID_PROFILE_IMAGE");
   }
 
@@ -121,7 +126,7 @@ export function validateGender(value: unknown): Gender {
 }
 
 export function validateShortIntroduction(value: unknown): string {
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || containsNullByte(value)) {
     throw new AppError("INVALID_PROFILE_INTRODUCTION");
   }
   const length = countWithoutSpace(value);
@@ -135,7 +140,11 @@ export function validateDescription(value: unknown): string | null {
   if (value === null) {
     return null;
   }
-  if (typeof value !== "string" || countWithoutSpace(value) > DESCRIPTION_MAX) {
+  if (
+    typeof value !== "string" ||
+    containsNullByte(value) ||
+    countWithoutSpace(value) > DESCRIPTION_MAX
+  ) {
     throw new AppError("INVALID_PROFILE_DESCRIPTION");
   }
   return value;

@@ -1,5 +1,6 @@
 import AppError from "../errors/app-error.js";
 import { parseBigId } from "../utils/bigint.js";
+import { containsNullByte } from "../utils/db-string-validation.js";
 
 export interface CreateReviewInput {
   rating: number;
@@ -32,7 +33,7 @@ function validateRating(rating: unknown): number {
 
 // 문자 수 제한은 공백 제외 기준, 저장은 원문 유지
 function validateContent(content: unknown): string {
-  if (typeof content !== "string") {
+  if (typeof content !== "string" || containsNullByte(content)) {
     throw new AppError("INVALID_REVIEW_CONTENT");
   }
   const contentLength = content.replace(/\s/g, "").length;
