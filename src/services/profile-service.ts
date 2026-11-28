@@ -1,5 +1,6 @@
+import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
-import { getUniqueConstraintName } from "../utils/prisma-error.js";
+import { getUniqueConstraintName, isRecordNotFoundError } from "../utils/prisma-error.js";
 import {
   createSitterProfileByUserId,
   findOwnerProfileByUserId,
@@ -8,6 +9,7 @@ import {
   updateSitterProfileByUserId,
   findSitterMyPageByUserId,
 } from "../repositories/profile-repository.js";
+import type { DbClient } from "../types/db.js";
 import type {
   CreateSitterProfileInput,
   UpdateOwnerProfileInput,
@@ -17,12 +19,6 @@ import type {
 import { getSitterAggregates } from "./sitter-aggregate-service.js";
 
 type OwnerProfileRecord = NonNullable<Awaited<ReturnType<typeof findOwnerProfileByUserId>>>;
-
-function isRecordNotFound(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2025"
-  );
-}
 
 function toOwnerProfileResponse(profile: OwnerProfileRecord) {
   return {
@@ -44,18 +40,22 @@ export async function getOwnerProfile(userId: bigint) {
   return toOwnerProfileResponse(profile);
 }
 
-export async function updateOwnerProfile(userId: bigint, input: UpdateOwnerProfileInput) {
-  const existing = await findOwnerProfileByUserId(userId);
+export async function updateOwnerProfile(
+  userId: bigint,
+  input: UpdateOwnerProfileInput,
+  db: DbClient = prisma,
+) {
+  const existing = await findOwnerProfileByUserId(userId, db);
   if (!existing) {
     throw new AppError("PROFILE_NOT_FOUND");
   }
 
   try {
-    const updated = await updateOwnerProfileByUserId(userId, input);
+    const updated = await updateOwnerProfileByUserId(userId, input, db);
     return toOwnerProfileResponse(updated);
   } catch (error) {
-    // 사전 조회 이후 프로필이 사라진 경우만 비즈니스 에러로 변환
-    if (isRecordNotFound(error) && !(await findOwnerProfileByUserId(userId))) {
+    // 사전 조회 이후 프로필이 사라진 경우만 비즈니스 에러로 변환 (P2025 공통 기준)
+    if (isRecordNotFoundError(error) && !(await findOwnerProfileByUserId(userId, db))) {
       throw new AppError("PROFILE_NOT_FOUND");
     }
     throw error;

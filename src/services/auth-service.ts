@@ -1,32 +1,36 @@
 import { prisma } from "../config/prisma.js";
 import AppError from "../errors/app-error.js";
+import type { DbClient } from "../types/db.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
+import { getUniqueConstraintName } from "../utils/prisma-error.js";
 import type { LoginInput, SignupInput } from "../validators/auth-validator.js";
 
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002"
-  );
-}
+const EMAIL_UNIQUE_INDEX = "User_email_role_key";
+const NICKNAME_UNIQUE_INDEX = "User_nickname_role_key";
 
-async function assertNotTaken(email: string, nickname: string, role: SignupInput["role"]) {
+async function assertNotTaken(
+  email: string,
+  nickname: string,
+  role: SignupInput["role"],
+  db: DbClient = prisma,
+) {
   const [emailTaken, nicknameTaken] = await Promise.all([
-    prisma.user.findUnique({ where: { email_role: { email, role } } }),
-    prisma.user.findUnique({ where: { nickname_role: { nickname, role } } }),
+    db.user.findUnique({ where: { email_role: { email, role } } }),
+    db.user.findUnique({ where: { nickname_role: { nickname, role } } }),
   ]);
   if (emailTaken) throw new AppError("EMAIL_ALREADY_EXISTS");
   if (nicknameTaken) throw new AppError("NICKNAME_ALREADY_EXISTS");
 }
 
-export async function signup(input: SignupInput) {
+export async function signup(input: SignupInput, db: DbClient = prisma) {
   const { email, password, nickname, role } = input;
 
-  await assertNotTaken(email, nickname, role);
+  await assertNotTaken(email, nickname, role, db);
 
   const passwordHash = await hashPassword(password);
 
   try {
-    return await prisma.user.create({
+    return await db.user.create({
       data: {
         email,
         passwordHash,
@@ -43,9 +47,13 @@ export async function signup(input: SignupInput) {
       },
     });
   } catch (error) {
-    if (isUniqueViolation(error)) {
-      await assertNotTaken(email, nickname, role);
-    }
+    // 사전 조회 이후 동시에 같은 이메일·닉네임이 생긴 경우만 비즈니스 에러로 변환
+    const constraintName = getUniqueConstraintName(error);
+
+    if (constraintName === EMAIL_UNIQUE_INDEX) throw new AppError("EMAIL_ALREADY_EXISTS");
+    if (constraintName === NICKNAME_UNIQUE_INDEX) throw new AppError("NICKNAME_ALREADY_EXISTS");
+
+    // 충돌 원인을 식별할 수 없으면 원본 오류 전파
     throw error;
   }
 }
